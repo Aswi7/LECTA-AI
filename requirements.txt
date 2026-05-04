@@ -1,0 +1,16 @@
+flask
+flask-cors
+openai-whisper
+torch
+spacy
+scikit-learn
+numpy
+pandas
+pymongo
+deep-translator
+langdetect
+pydub
+werkzeug
+python-dotenv
+reportlab
+python-docx
