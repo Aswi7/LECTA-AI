@@ -1,16 +1,16 @@
-flask
-flask-cors
-openai-whisper
-torch
-spacy
-scikit-learn
-numpy
-pandas
-pymongo
-deep-translator
-langdetect
-pydub
-werkzeug
-python-dotenv
-reportlab
-python-docx
+flask==3.0.2  # REST API backend framework
+flask-cors==4.0.0  # Enables Cross-Origin Resource Sharing for frontend integration
+openai-whisper==20231117  # Speech-to-text model for transcribing lectures
+torch==2.2.1  # Deep learning framework required by Whisper
+spacy==3.7.4  # NLP library for entity recognition and question generation
+scikit-learn==1.4.1.post1  # TF-IDF and machine learning utilities for summarization
+numpy==1.26.4  # Numerical processing for audio arrays and ML data
+pandas==2.2.1  # Data manipulation for structured lecture data
+pymongo==4.6.2  # MongoDB driver for storing transcripts and metadata
+deep-translator==1.11.4  # Multilingual support for translating lecture notes
+langdetect==1.0.9  # Automatically identifying the source language of the lecture
+pydub==0.25.1  # Audio manipulation and format conversion (FFmpeg wrapper)
+werkzeug==3.0.1  # WSGI utility library for secure file uploads
+python-dotenv==1.0.1  # Loading environment variables from .env files
+reportlab==4.1.0  # PDF generation for lecture summaries and notes
+python-docx==1.1.0  # Microsoft Word (.docx) export functionality
