@@ -17,7 +17,10 @@ from modules.keyword_extractor import get_key_concepts
 from modules.question_generator import generate_questions
 from modules.translator import translate_text, translate_keywords
 from utils.audio_processor import preprocess_audio, cleanup_file
-from utils.db_handler import db_handler
+from utils.db_handler import (
+    save_result, get_result, get_all_results, 
+    get_paginated_results, delete_result, ping_db
+)
 from utils.export_handler import export_handler
 
 # Configure logging
@@ -117,6 +120,7 @@ def process_audio():
         # Combine all results
         full_response = {
             "session_id": session_id,
+            "filename": filename,
             "transcript": transcript,
             "cleaned_text": cleaned_text,
             "language": lang_data,
@@ -126,7 +130,7 @@ def process_audio():
         }
         
         # Save to DB
-        db_handler.save_session(full_response)
+        save_result(session_id, full_response)
         
         return jsonify(full_response), 200
 
@@ -167,6 +171,7 @@ def process_text_api():
         
         full_response = {
             "session_id": session_id,
+            "filename": "text_input",
             "transcript": text,
             "cleaned_text": cleaned_text,
             "language": lang_data,
@@ -175,7 +180,7 @@ def process_text_api():
             **ai_results
         }
         
-        db_handler.save_session(full_response)
+        save_result(session_id, full_response)
         
         return jsonify(full_response), 200
 
@@ -184,24 +189,24 @@ def process_text_api():
         return jsonify({"error": str(e), "session_id": session_id}), 500
 
 @app.route('/api/results', methods=['GET'])
-def get_results():
+def get_results_api():
     try:
-        results = db_handler.get_recent_sessions(10)
+        results = get_all_results(10)
         return jsonify(results), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/results/<session_id>', methods=['GET'])
-def get_result_by_id(session_id):
-    result = db_handler.get_session_by_id(session_id)
+def get_result_by_id_api(session_id):
+    result = get_result(session_id)
     if result:
         return jsonify(result), 200
     return jsonify({"error": "Session not found", "session_id": session_id}), 404
 
 @app.route('/api/results/<session_id>', methods=['DELETE'])
-def delete_result(session_id):
+def delete_result_api(session_id):
     try:
-        db_handler.delete_session(session_id)
+        delete_result(session_id)
         export_handler.delete_exports(session_id)
         return jsonify({"message": "Session deleted successfully", "session_id": session_id}), 200
     except Exception as e:
@@ -212,7 +217,7 @@ def download_export(session_id, fmt):
     if fmt not in ['pdf', 'docx', 'txt']:
         return jsonify({"error": "Invalid format", "session_id": session_id}), 400
     
-    session_data = db_handler.get_session_by_id(session_id)
+    session_data = get_result(session_id)
     if not session_data:
         return jsonify({"error": "Session not found", "session_id": session_id}), 404
     
@@ -235,13 +240,13 @@ def download_export(session_id, fmt):
         return jsonify({"error": str(e), "session_id": session_id}), 500
 
 @app.route('/api/history', methods=['GET'])
-def get_history():
+def get_history_api():
     try:
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 10))
-        search = request.args.get('search', None)
+        search = request.args.get('search', "")
         
-        history = db_handler.get_history(page, limit, search)
+        history = get_paginated_results(page, limit, search)
         return jsonify(history), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -251,8 +256,10 @@ def health_check():
     return jsonify({
         "status": "ok",
         "models_loaded": True,
+        "db_connected": ping_db(),
         "timestamp": datetime.utcnow().isoformat()
     }), 200
+
 
 if __name__ == '__main__':
     os.makedirs(CONFIG.UPLOAD_FOLDER, exist_ok=True)
