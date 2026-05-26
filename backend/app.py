@@ -1,0 +1,260 @@
+import os
+import time
+import uuid
+import logging
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
+from werkzeug.utils import secure_filename
+
+from config import CONFIG
+from modules.transcriber import transcribe_audio
+from modules.language_detector import detect_language
+from modules.nlp_processor import process_text
+from modules.summarizer import summarize_text, generate_bullet_notes
+from modules.keyword_extractor import get_key_concepts
+from modules.question_generator import generate_questions
+from modules.translator import translate_text, translate_keywords
+from utils.audio_processor import preprocess_audio, cleanup_file
+from utils.db_handler import db_handler
+from utils.export_handler import export_handler
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+app = Flask(__name__)
+app.config.from_object(CONFIG)
+CORS(app)
+
+ALLOWED_EXTENSIONS = {'mp3', 'mp4', 'wav', 'm4a', 'ogg', 'flac', 'webm'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def run_ai_modules(cleaned_text, sentences, target_language):
+    """Runs the 4 AI modules in parallel."""
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        # Task 1: Summarization
+        fut_summary = executor.submit(lambda: {
+            "summary": summarize_text(cleaned_text, sentences),
+            "bullet_notes": generate_bullet_notes(sentences)
+        })
+        
+        # Task 2: Keyword Extraction
+        fut_concepts = executor.submit(get_key_concepts, cleaned_text)
+        
+        # Task 3: Translation
+        fut_translation = executor.submit(lambda: {
+            "translated_text": translate_text(cleaned_text, target_language) if target_language != "en" else cleaned_text,
+        })
+        
+        # Get concepts first because questions and keyword translation depend on it
+        concepts = fut_concepts.result()
+        
+        # Task 4: Question Generation (depends on concepts)
+        fut_questions = executor.submit(generate_questions, sentences, concepts.get("keywords", []))
+        
+        # Additional Translation Task (Keywords) - could be part of Task 3
+        fut_trans_kws = executor.submit(translate_keywords, concepts.get("keywords", []), target_language)
+
+        results = {
+            "summary": fut_summary.result()["summary"],
+            "bullet_notes": fut_summary.result()["bullet_notes"],
+            "concepts": concepts,
+            "translated_content": fut_translation.result()["translated_text"],
+            "questions": fut_questions.result(),
+            "translated_keywords": fut_trans_kws.result()
+        }
+        
+    return results
+
+@app.route('/api/process', methods=['POST'])
+def process_audio():
+    start_time = time.time()
+    session_id = str(uuid.uuid4())[:8]
+    pipeline_steps = []
+    
+    if 'audio' not in request.files:
+        return jsonify({"error": "No audio file provided", "session_id": session_id}), 400
+    
+    file = request.files['audio']
+    target_language = request.form.get('target_language', 'ta')
+    
+    if file.filename == '':
+        return jsonify({"error": "No selected file", "session_id": session_id}), 400
+    
+    if not allowed_file(file.filename):
+        return jsonify({"error": "Unsupported file format", "session_id": session_id}), 400
+
+    filename = secure_filename(file.filename)
+    upload_path = os.path.join(CONFIG.UPLOAD_FOLDER, f"{session_id}_{filename}")
+    file.save(upload_path)
+    
+    processed_path = None
+    try:
+        # Step 1: Preprocess Audio
+        processed_path = preprocess_audio(upload_path)
+        pipeline_steps.append("preprocess_audio")
+        
+        # Step 2: Transcribe Audio
+        transcript = transcribe_audio(processed_path)
+        pipeline_steps.append("transcribe_audio")
+        
+        # Step 3: Detect Language
+        lang_data = detect_language(transcript)
+        pipeline_steps.append("detect_language")
+        
+        # Step 4: Process Text (NLP)
+        cleaned_text, sentences = process_text(transcript)
+        pipeline_steps.append("process_text")
+        
+        # Parallel AI Modules
+        ai_results = run_ai_modules(cleaned_text, sentences, target_language)
+        pipeline_steps.extend(["summarization", "keyword_extraction", "question_generation", "translation"])
+        
+        # Combine all results
+        full_response = {
+            "session_id": session_id,
+            "transcript": transcript,
+            "cleaned_text": cleaned_text,
+            "language": lang_data,
+            "pipeline_steps": pipeline_steps,
+            "processing_time_seconds": round(time.time() - start_time, 2),
+            **ai_results
+        }
+        
+        # Save to DB
+        db_handler.save_session(full_response)
+        
+        return jsonify(full_response), 200
+
+    except Exception as e:
+        logger.error(f"Error processing session {session_id}: {e}")
+        return jsonify({"error": str(e), "session_id": session_id}), 500
+    finally:
+        # Cleanup
+        cleanup_file(upload_path)
+        if processed_path:
+            cleanup_file(processed_path)
+
+@app.route('/api/process-text', methods=['POST'])
+def process_text_api():
+    start_time = time.time()
+    session_id = str(uuid.uuid4())[:8]
+    pipeline_steps = []
+    
+    data = request.get_json()
+    if not data or 'text' not in data:
+        return jsonify({"error": "No text provided", "session_id": session_id}), 400
+    
+    text = data['text']
+    target_language = data.get('target_language', 'ta')
+    
+    try:
+        # Step 1: Detect Language
+        lang_data = detect_language(text)
+        pipeline_steps.append("detect_language")
+        
+        # Step 2: Process Text (NLP)
+        cleaned_text, sentences = process_text(text)
+        pipeline_steps.append("process_text")
+        
+        # Parallel AI Modules
+        ai_results = run_ai_modules(cleaned_text, sentences, target_language)
+        pipeline_steps.extend(["summarization", "keyword_extraction", "question_generation", "translation"])
+        
+        full_response = {
+            "session_id": session_id,
+            "transcript": text,
+            "cleaned_text": cleaned_text,
+            "language": lang_data,
+            "pipeline_steps": pipeline_steps,
+            "processing_time_seconds": round(time.time() - start_time, 2),
+            **ai_results
+        }
+        
+        db_handler.save_session(full_response)
+        
+        return jsonify(full_response), 200
+
+    except Exception as e:
+        logger.error(f"Error processing text session {session_id}: {e}")
+        return jsonify({"error": str(e), "session_id": session_id}), 500
+
+@app.route('/api/results', methods=['GET'])
+def get_results():
+    try:
+        results = db_handler.get_recent_sessions(10)
+        return jsonify(results), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/results/<session_id>', methods=['GET'])
+def get_result_by_id(session_id):
+    result = db_handler.get_session_by_id(session_id)
+    if result:
+        return jsonify(result), 200
+    return jsonify({"error": "Session not found", "session_id": session_id}), 404
+
+@app.route('/api/results/<session_id>', methods=['DELETE'])
+def delete_result(session_id):
+    try:
+        db_handler.delete_session(session_id)
+        export_handler.delete_exports(session_id)
+        return jsonify({"message": "Session deleted successfully", "session_id": session_id}), 200
+    except Exception as e:
+        return jsonify({"error": str(e), "session_id": session_id}), 500
+
+@app.route('/api/download/<session_id>/<fmt>', methods=['GET'])
+def download_export(session_id, fmt):
+    if fmt not in ['pdf', 'docx', 'txt']:
+        return jsonify({"error": "Invalid format", "session_id": session_id}), 400
+    
+    session_data = db_handler.get_session_by_id(session_id)
+    if not session_data:
+        return jsonify({"error": "Session not found", "session_id": session_id}), 404
+    
+    try:
+        export_path = export_handler.generate_export(session_data, fmt)
+        
+        mimetypes = {
+            'pdf': 'application/pdf',
+            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'txt': 'text/plain'
+        }
+        
+        return send_file(
+            export_path,
+            mimetype=mimetypes.get(fmt),
+            as_attachment=True,
+            download_name=f"{session_id}.{fmt}"
+        )
+    except Exception as e:
+        return jsonify({"error": str(e), "session_id": session_id}), 500
+
+@app.route('/api/history', methods=['GET'])
+def get_history():
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 10))
+        search = request.args.get('search', None)
+        
+        history = db_handler.get_history(page, limit, search)
+        return jsonify(history), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({
+        "status": "ok",
+        "models_loaded": True,
+        "timestamp": datetime.utcnow().isoformat()
+    }), 200
+
+if __name__ == '__main__':
+    os.makedirs(CONFIG.UPLOAD_FOLDER, exist_ok=True)
+    os.makedirs(CONFIG.EXPORTS_FOLDER, exist_ok=True)
+    app.run(debug=True, port=5000)
