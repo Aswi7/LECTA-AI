@@ -9,30 +9,43 @@ const Home = () => {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
-  const handleProcessStart = () => {
+  const handleProcess = async (file, targetLanguage) => {
     setIsProcessing(true);
     setResult(null);
     setError(null);
-  };
 
-  const handleProcessComplete = (data) => {
-    setResult(data);
-    setIsProcessing(false);
-  };
+    const formData = new FormData();
+    formData.append('audio', file);
+    formData.append('target_language', targetLanguage);
 
-  const handleProcessError = (err) => {
-    setError(err);
-    setIsProcessing(false);
+    try {
+      const response = await fetch('http://localhost:5000/api/process', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setResult(data);
+      } else {
+        setError(data.error || 'Failed to process lecture. Please try again.');
+      }
+    } catch (err) {
+      setError('Network error: Could not connect to the backend server.');
+      console.error('Process Error:', err);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
     <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-8">
       {/* Upload Section */}
-      {!isProcessing && !result && (
+      {!result && (
         <UploadPanel 
-          onStart={handleProcessStart} 
-          onComplete={handleProcessComplete} 
-          onError={handleProcessError} 
+          onSubmit={handleProcess} 
+          isLoading={isProcessing} 
         />
       )}
 
