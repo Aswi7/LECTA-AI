@@ -207,7 +207,7 @@ def get_result_by_id_api(session_id):
 def delete_result_api(session_id):
     try:
         delete_result(session_id)
-        export_handler.delete_exports(session_id)
+        delete_exports(session_id)
         return jsonify({"message": "Session deleted successfully", "session_id": session_id}), 200
     except Exception as e:
         return jsonify({"error": str(e), "session_id": session_id}), 500
@@ -222,7 +222,7 @@ def download_export(session_id, fmt):
         return jsonify({"error": "Session not found", "session_id": session_id}), 404
     
     try:
-        export_path = export_handler.generate_export(session_data, fmt)
+        export_path = generate_export(session_id, fmt, session_data, CONFIG.EXPORTS_FOLDER)
         
         mimetypes = {
             'pdf': 'application/pdf',
@@ -234,7 +234,7 @@ def download_export(session_id, fmt):
             export_path,
             mimetype=mimetypes.get(fmt),
             as_attachment=True,
-            download_name=f"{session_id}.{fmt}"
+            download_name=f"{session_id}_notes.{fmt}"
         )
     except Exception as e:
         return jsonify({"error": str(e), "session_id": session_id}), 500
@@ -265,3 +265,4 @@ if __name__ == '__main__':
     os.makedirs(CONFIG.UPLOAD_FOLDER, exist_ok=True)
     os.makedirs(CONFIG.EXPORTS_FOLDER, exist_ok=True)
     app.run(debug=True, port=5000)
+000)
