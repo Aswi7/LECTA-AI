@@ -1,31 +1,51 @@
+import React from 'react';
+import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
+import Home from './pages/Home';
+import History from './pages/History';
+
 function App() {
+  const activeStyle = "text-blue-600 border-b-2 border-blue-600 pb-1";
+  const inactiveStyle = "text-gray-600 hover:text-blue-600 transition-colors";
+
   return (
-    <main className="min-h-screen bg-slate-100 px-6 py-16 text-slate-900">
-      <div className="mx-auto flex max-w-3xl flex-col items-center rounded-3xl bg-white p-10 text-center shadow-xl ring-1 ring-slate-200">
-        <span className="mb-4 rounded-full bg-emerald-100 px-4 py-1 text-sm font-semibold text-emerald-700">
-          Tailwind v4 active
-        </span>
-        <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
-          Tailwind is working in your React app
-        </h1>
-        <p className="mt-4 max-w-2xl text-lg text-slate-600">
-          Your frontend is now using Tailwind through the Vite plugin, so you
-          can start building by adding utility classes directly in JSX.
-        </p>
-        <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <span className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">
-            npm run dev
-          </span>
-          <span className="rounded-full bg-blue-100 px-4 py-2 text-sm font-medium text-blue-700">
-            Edit src/App.jsx
-          </span>
-          <span className="rounded-full bg-violet-100 px-4 py-2 text-sm font-medium text-violet-700">
-            Build your UI
-          </span>
-        </div>
+    <BrowserRouter>
+      <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
+        {/* Navigation Bar */}
+        <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16 items-center">
+              <div className="flex-shrink-0 flex items-center">
+                <span className="text-2xl font-bold text-gray-800">🎓 Lecture AI</span>
+              </div>
+              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+                <NavLink 
+                  to="/" 
+                  className={({ isActive }) => isActive ? activeStyle : inactiveStyle}
+                  end
+                >
+                  Process Lecture
+                </NavLink>
+                <NavLink 
+                  to="/history" 
+                  className={({ isActive }) => isActive ? activeStyle : inactiveStyle}
+                >
+                  Session History
+                </NavLink>
+              </div>
+            </div>
+          </div>
+        </nav>
+
+        {/* Main Content Area */}
+        <main className="flex-grow">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/history" element={<History />} />
+          </Routes>
+        </main>
       </div>
-    </main>
-  )
+    </BrowserRouter>
+  );
 }
 
-export default App
+export default App;
