@@ -1,5 +1,13 @@
+import os
+import sys
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
+
+# Add root directory to sys.path to allow importing 'config'
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
+
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 from config import CONFIG
@@ -40,7 +48,7 @@ def save_result(session_id: str, result: dict) -> bool:
         return False
     
     try:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
         update_data = {
             "$set": {**result, "updated_at": now},
             "$setOnInsert": {"created_at": now}

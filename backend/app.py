@@ -1,8 +1,25 @@
 import os
+import sys
+
+# Add root directory to sys.path to allow importing 'config'
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
+
+# Compatibility shim for Python 3.13 (audioop removal)
+try:
+    import audioop
+except ImportError:
+    try:
+        import audioop_lts as audioop
+        sys.modules['audioop'] = audioop
+    except ImportError:
+        pass
+
 import time
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
@@ -21,7 +38,7 @@ from utils.db_handler import (
     save_result, get_result, get_all_results, 
     get_paginated_results, delete_result, ping_db
 )
-from utils.export_handler import export_handler
+from utils.export_handler import generate_export, delete_exports
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -257,7 +274,7 @@ def health_check():
         "status": "ok",
         "models_loaded": True,
         "db_connected": ping_db(),
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(UTC).isoformat()
     }), 200
 
 
@@ -265,4 +282,3 @@ if __name__ == '__main__':
     os.makedirs(CONFIG.UPLOAD_FOLDER, exist_ok=True)
     os.makedirs(CONFIG.EXPORTS_FOLDER, exist_ok=True)
     app.run(debug=True, port=5000)
-000)

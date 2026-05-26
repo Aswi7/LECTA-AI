@@ -1,6 +1,13 @@
 import os
+import sys
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
+
+# Add root directory to sys.path to allow importing 'config'
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
+
 from typing import Dict, Any
 
 # PDF Imports
@@ -53,7 +60,7 @@ def export_as_pdf(session_data: Dict[str, Any], output_path: str) -> str:
     
     # Metadata
     filename = session_data.get('filename', 'Unknown')
-    gen_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    gen_date = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
     story.append(Paragraph(f"<b>File:</b> {filename}", styles['Normal']))
     story.append(Paragraph(f"<b>Generated:</b> {gen_date}", styles['Normal']))
     
@@ -133,7 +140,7 @@ def export_as_docx(session_data: Dict[str, Any], output_path: str) -> str:
     doc.add_heading("Lecture Notes", 0)
     
     filename = session_data.get('filename', 'Unknown')
-    gen_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    gen_date = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
     doc.add_paragraph(f"File: {filename}")
     doc.add_paragraph(f"Generated: {gen_date}")
     
@@ -194,7 +201,7 @@ def export_as_txt(session_data: Dict[str, Any], output_path: str) -> str:
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write("=== LECTURE NOTES ===\n")
         f.write(f"File: {session_data.get('filename', 'Unknown')}\n")
-        f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Generated: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"Session ID: {session_data.get('session_id', 'N/A')}\n\n")
         
         f.write("=== SUMMARY ===\n")
