@@ -9,20 +9,34 @@ const Home = () => {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
 
-  const handleProcess = async (file, targetLanguage) => {
+  const handleProcess = async (submission) => {
     setIsProcessing(true);
     setResult(null);
     setError(null);
 
-    const formData = new FormData();
-    formData.append('audio', file);
-    formData.append('target_language', targetLanguage);
-
     try {
-      const response = await fetch('http://localhost:5000/api/process', {
-        method: 'POST',
-        body: formData,
-      });
+      let response;
+      if (submission.type === 'file') {
+        const formData = new FormData();
+        formData.append('audio', submission.file);
+        formData.append('target_language', submission.language);
+
+        response = await fetch('http://localhost:5000/api/process', {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        response = await fetch('http://localhost:5000/api/process-url', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: submission.url,
+            target_language: submission.language,
+          }),
+        });
+      }
 
       const data = await response.json();
 
