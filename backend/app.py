@@ -38,6 +38,7 @@ from utils.db_handler import (
     save_result, get_result, get_all_results, 
     get_paginated_results, delete_result, ping_db
 )
+import yt_dlp
 from utils.export_handler import generate_export, delete_exports
 
 # Configure logging
@@ -52,6 +53,27 @@ ALLOWED_EXTENSIONS = {'mp3', 'mp4', 'wav', 'm4a', 'ogg', 'flac', 'webm'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def download_audio_from_url(url, session_id):
+    """Downloads audio from a URL (YouTube, etc.) using yt-dlp."""
+    output_path = os.path.join(CONFIG.UPLOAD_FOLDER, f"{session_id}_downloaded")
+    
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'outtmpl': output_path + '.%(ext)s',
+        'quiet': True,
+        'no_warnings': True,
+    }
+    
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        filename = f"{session_id}_downloaded.mp3"
+        return os.path.join(CONFIG.UPLOAD_FOLDER, filename), info.get('title', 'Downloaded Video')
 
 def run_ai_modules(cleaned_text, sentences, target_language):
     """Runs the 4 AI modules in parallel."""
@@ -157,6 +179,74 @@ def process_audio():
     finally:
         # Cleanup
         cleanup_file(upload_path)
+        if processed_path:
+            cleanup_file(processed_path)
+
+@app.route('/api/process-url', methods=['POST'])
+def process_url():
+    start_time = time.time()
+    session_id = str(uuid.uuid4())[:8]
+    pipeline_steps = []
+    
+    data = request.get_json()
+    if not data or 'url' not in data:
+        return jsonify({"error": "No URL provided", "session_id": session_id}), 400
+    
+    url = data['url']
+    target_language = data.get('target_language', 'ta')
+    
+    upload_path = None
+    processed_path = None
+    try:
+        # Step 0: Download from URL
+        upload_path, title = download_audio_from_url(url, session_id)
+        filename = f"{title}.mp3"
+        pipeline_steps.append("download_from_url")
+        
+        # Step 1: Preprocess Audio
+        processed_path = preprocess_audio(upload_path)
+        pipeline_steps.append("preprocess_audio")
+        
+        # Step 2: Transcribe Audio
+        transcript = transcribe_audio(processed_path)
+        pipeline_steps.append("transcribe_audio")
+        
+        # Step 3: Detect Language
+        lang_data = detect_language(transcript)
+        pipeline_steps.append("detect_language")
+        
+        # Step 4: Process Text (NLP)
+        cleaned_text, sentences = process_text(transcript)
+        pipeline_steps.append("process_text")
+        
+        # Parallel AI Modules
+        ai_results = run_ai_modules(cleaned_text, sentences, target_language)
+        pipeline_steps.extend(["summarization", "keyword_extraction", "question_generation", "translation"])
+        
+        # Combine all results
+        full_response = {
+            "session_id": session_id,
+            "filename": filename,
+            "transcript": transcript,
+            "cleaned_text": cleaned_text,
+            "language": lang_data,
+            "pipeline_steps": pipeline_steps,
+            "processing_time_seconds": round(time.time() - start_time, 2),
+            **ai_results
+        }
+        
+        # Save to DB
+        save_result(session_id, full_response)
+        
+        return jsonify(full_response), 200
+
+    except Exception as e:
+        logger.error(f"Error processing URL session {session_id}: {e}")
+        return jsonify({"error": str(e), "session_id": session_id}), 500
+    finally:
+        # Cleanup
+        if upload_path:
+            cleanup_file(upload_path)
         if processed_path:
             cleanup_file(processed_path)
 
