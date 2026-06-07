@@ -21,6 +21,7 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
   const [audioURL, setAudioURL] = useState(null);
   const [error, setError] = useState(null);
   const [selectedLanguage, setSelectedLanguage] = useState('ta');
+  const [supportedMimeType, setSupportedMimeType] = useState(null);
 
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -30,6 +31,17 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
   const streamRef = useRef(null);
+
+  // Check for MediaRecorder support and preferred mime types
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.MediaRecorder) {
+      if (MediaRecorder.isTypeSupported('audio/webm')) {
+        setSupportedMimeType('audio/webm');
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        setSupportedMimeType('audio/mp4');
+      }
+    }
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -62,6 +74,11 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
   };
 
   const startRecording = async () => {
+    if (!supportedMimeType) {
+      setError('Your browser does not support live recording. Please use Chrome, Edge, or Firefox.');
+      return;
+    }
+
     setError(null);
     setRecorderState('requesting');
     audioChunksRef.current = [];
@@ -70,7 +87,7 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: supportedMimeType });
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (event) => {
@@ -80,7 +97,7 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const blob = new Blob(audioChunksRef.current, { type: supportedMimeType });
         const url = URL.createObjectURL(blob);
         setAudioBlob(blob);
         setAudioURL(url);
@@ -176,7 +193,8 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
 
   const submitRecording = () => {
     if (!audioBlob) return;
-    const file = new File([audioBlob], 'live_recording.webm', { type: 'audio/webm' });
+    const extension = supportedMimeType === 'audio/mp4' ? 'mp4' : 'webm';
+    const file = new File([audioBlob], `live_recording.${extension}`, { type: supportedMimeType });
     onSubmit({ type: 'file', file, language: selectedLanguage });
   };
 
@@ -196,6 +214,17 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
   return (
     <div className="w-full max-w-3xl mx-auto bg-white rounded-xl shadow-lg p-8 border border-gray-100">
       <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">Live Lecture Recorder</h2>
+
+      {!supportedMimeType && recorderState === 'idle' && (
+        <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-6">
+          <div className="flex">
+            <span className="text-amber-400 mr-3">⚠️</span>
+            <p className="text-sm text-amber-700 font-medium">
+              Live recording is not fully supported in your browser. For the best experience, please use Chrome, Edge, or Firefox.
+            </p>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
