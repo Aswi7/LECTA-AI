@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import UploadPanel from '../components/UploadPanel';
-import LiveRecorder from '../components/LiveRecorder';
 import ProgressTracker from '../components/ProgressTracker';
 import ResultsDashboard from '../components/ResultsDashboard';
 import DownloadBar from '../components/DownloadBar';
 
 const Home = () => {
-  const [activeTab, setActiveTab] = useState('upload'); // 'upload' or 'record'
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -57,39 +55,12 @@ const Home = () => {
 
   return (
     <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-8">
-      {/* Tab Switcher */}
-      {!result && !isProcessing && (
-        <div className="flex justify-center">
-          <div className="bg-white p-1 rounded-xl shadow-sm border border-gray-200 flex space-x-2">
-            <button
-              onClick={() => setActiveTab('upload')}
-              className={`px-6 py-2 rounded-lg font-bold transition-all ${activeTab === 'upload' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}
-            >
-              Upload File / URL
-            </button>
-            <button
-              onClick={() => setActiveTab('record')}
-              className={`px-6 py-2 rounded-lg font-bold transition-all ${activeTab === 'record' ? 'bg-red-600 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}
-            >
-              Live Recording 🎙️
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Input Section */}
       {!result && (
-        activeTab === 'upload' ? (
-          <UploadPanel 
-            onSubmit={handleProcess} 
-            isLoading={isProcessing} 
-          />
-        ) : (
-          <LiveRecorder
-            onSubmit={handleProcess}
-            isLoading={isProcessing}
-          />
-        )
+        <UploadPanel 
+          onSubmit={handleProcess} 
+          isLoading={isProcessing} 
+        />
       )}
 
       {/* Processing State */}
