@@ -10,10 +10,10 @@ const ProgressTracker = () => {
   ];
 
   return (
-    <div className="max-w-2xl mx-auto py-20 px-8 bg-white dark:bg-gray-900 rounded-[3rem] shadow-2xl shadow-brand-500/10 dark:shadow-brand-950/20 border border-gray-100 dark:border-gray-800 flex flex-col items-center text-center transition-colors">
+    <div className="max-w-2xl mx-auto py-20 px-8 bg-white dark:bg-gray-900 rounded-7xl shadow-2xl shadow-brand-500/10 dark:shadow-brand-950/20 border border-gray-100 dark:border-gray-800 flex flex-col items-center text-center transition-colors">
       <div className="relative mb-12">
         <div className="absolute inset-0 bg-brand-500 rounded-full blur-3xl opacity-20 animate-pulse" />
-        <div className="relative bg-brand-600 p-8 rounded-[2.5rem] shadow-xl">
+        <div className="relative bg-brand-600 p-8 rounded-5xl shadow-xl">
           <Loader2 className="w-12 h-12 text-white animate-spin" />
         </div>
       </div>
@@ -41,7 +41,7 @@ const ProgressTracker = () => {
           initial={{ x: '-100%' }}
           animate={{ x: '100%' }}
           transition={{ repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
-          className="w-1/2 h-full bg-gradient-to-r from-transparent via-brand-500 to-transparent"
+          className="w-1/2 h-full bg-linear-to-r from-transparent via-brand-500 to-transparent"
         />
       </div>
     </div>

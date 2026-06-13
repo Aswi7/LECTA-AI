@@ -76,7 +76,13 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
       return;
     }
 
+    if (audioURL) {
+      URL.revokeObjectURL(audioURL);
+      setAudioURL(null);
+      setAudioBlob(null);
+    }
     setError(null);
+    setDuration(0);
     setRecorderState('requesting');
     audioChunksRef.current = [];
 
@@ -146,7 +152,11 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
         
         ctx.fillStyle = gradient;
         ctx.beginPath();
-        ctx.roundRect(x, (canvas.height - barHeight) / 2, barWidth, barHeight, 4);
+        if (typeof ctx.roundRect === 'function') {
+          ctx.roundRect(x, (canvas.height - barHeight) / 2, barWidth, barHeight, 4);
+        } else {
+          ctx.rect(x, (canvas.height - barHeight) / 2, barWidth, barHeight);
+        }
         ctx.fill();
 
         x += barWidth + 2;
@@ -177,7 +187,15 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
       mediaRecorderRef.current.stop();
       stopTracks();
       stopTimer();
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+        analyserRef.current = null;
+      }
       setRecorderState('stopped');
     }
   };
@@ -263,7 +281,7 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
               </span>
             </div>
 
-            <div className="bg-gray-900 dark:bg-black p-8 rounded-[2rem] shadow-2xl border-4 border-gray-800 dark:border-gray-900">
+            <div className="bg-gray-900 dark:bg-black p-8 rounded-4xl shadow-2xl border-4 border-gray-800 dark:border-gray-900">
               <canvas ref={canvasRef} width="800" height="120" className="w-full h-32" />
             </div>
 
@@ -286,7 +304,7 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
               
               <button
                 onClick={stopRecording}
-                className="w-20 h-20 bg-gray-900 dark:bg-gray-800 rounded-[1.5rem] flex items-center justify-center text-white hover:bg-black transition-all shadow-xl"
+                className="w-20 h-20 bg-gray-900 dark:bg-gray-800 rounded-3xl flex items-center justify-center text-white hover:bg-black transition-all shadow-xl"
               >
                 <Square className="w-8 h-8 fill-current" />
               </button>
@@ -300,7 +318,7 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
             animate={{ opacity: 1, scale: 1 }}
             className="space-y-8 py-6"
           >
-            <div className="bg-emerald-50 dark:bg-emerald-950/20 p-8 rounded-[2rem] border border-emerald-100 dark:border-emerald-900/50 flex flex-col items-center text-center space-y-4">
+            <div className="bg-emerald-50 dark:bg-emerald-950/20 p-8 rounded-4xl border border-emerald-100 dark:border-emerald-900/50 flex flex-col items-center text-center space-y-4">
               <div className="bg-white dark:bg-gray-800 p-4 rounded-3xl shadow-sm">
                 <Headphones className="w-10 h-10 text-emerald-500" />
               </div>
@@ -315,7 +333,7 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
               <button
                 onClick={submitRecording}
                 disabled={isLoading}
-                className="flex-grow py-5 bg-brand-600 text-white rounded-2xl font-black text-lg hover:bg-brand-700 transition-all shadow-xl active:scale-95 disabled:opacity-50"
+                className="grow py-5 bg-brand-600 text-white rounded-2xl font-black text-lg hover:bg-brand-700 transition-all shadow-xl active:scale-95 disabled:opacity-50"
               >
                 {isLoading ? 'Analysing...' : 'Submit to AI'}
               </button>

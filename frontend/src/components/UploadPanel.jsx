@@ -105,7 +105,7 @@ const UploadPanel = ({ onSubmit, isLoading }) => {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-[2rem] shadow-2xl shadow-brand-100/20 dark:shadow-brand-900/10 border border-gray-100 dark:border-gray-800 overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-4xl shadow-2xl shadow-brand-100/20 dark:shadow-brand-900/10 border border-gray-100 dark:border-gray-800 overflow-hidden">
         {activeTab === 'upload' ? (
           <div className="p-10 md:p-12">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
@@ -141,7 +141,7 @@ const UploadPanel = ({ onSubmit, isLoading }) => {
                   onClick={() => !isLoading && fileInputRef.current.click()}
                   className={`
                     relative cursor-pointer group
-                    border-3 rounded-[1.5rem] p-16 text-center transition-all duration-500
+                    border-4 rounded-3xl p-16 text-center transition-all duration-500
                     ${dragOver ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-900/10 scale-[0.99]' : 'border-dashed border-gray-200 dark:border-gray-700 hover:border-brand-400 hover:bg-gray-50/50 dark:hover:bg-gray-800/50'}
                     ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}
                   `}
@@ -274,7 +274,7 @@ const UploadPanel = ({ onSubmit, isLoading }) => {
           { icon: <Globe className="text-brand-500" />, title: "Translation", desc: "Support for 10+ languages" },
           { icon: <Mic className="text-brand-500" />, title: "Key Concepts", desc: "Automated keyword extraction" }
         ].map((feat, i) => (
-          <div key={i} className="bg-white dark:bg-gray-900 p-6 rounded-[1.5rem] border border-gray-100 dark:border-gray-800 flex items-center space-x-4 shadow-sm">
+          <div key={i} className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 flex items-center space-x-4 shadow-sm">
             <div className="bg-brand-50 dark:bg-brand-900/30 p-3 rounded-xl">{feat.icon}</div>
             <div>
               <h4 className="font-bold text-gray-900 dark:text-white">{feat.title}</h4>

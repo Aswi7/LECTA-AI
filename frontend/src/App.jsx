@@ -27,16 +27,16 @@ function App() {
 
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-[var(--bg)] flex flex-col font-sans transition-colors duration-300">
+      <div className="min-h-screen bg-(--bg) flex flex-col font-sans transition-colors duration-300">
         {/* Modern Navigation Bar */}
         <nav className="glass sticky top-0 z-50 border-b border-gray-200/50 dark:border-gray-800/50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between h-20 items-center">
-              <div className="flex-shrink-0 flex items-center space-x-3 group">
+              <div className="shrink-0 flex items-center space-x-3 group">
                 <div className="bg-brand-500 p-2 rounded-xl shadow-lg group-hover:rotate-12 transition-transform duration-300">
                   <Sparkles className="w-6 h-6 text-white" />
                 </div>
-                <span className="text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-brand-600 to-brand-400 font-heading tracking-tight">
+                <span className="text-xl font-extrabold bg-clip-text text-transparent bg-linear-to-r from-brand-600 to-brand-400 font-heading tracking-tight">
                   LECTAAI
                 </span>
               </div>
@@ -75,7 +75,7 @@ function App() {
         </nav>
 
         {/* Main Content Area */}
-        <main className="flex-grow">
+        <main className="grow">
           <div className="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
             <Routes>
               <Route path="/" element={<Home />} />

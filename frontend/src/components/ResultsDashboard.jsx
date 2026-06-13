@@ -62,7 +62,7 @@ const ResultsDashboard = ({ result }) => {
       </div>
 
       {/* 2. Main Content Card */}
-      <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-xl shadow-brand-500/5 dark:shadow-brand-950/20 border border-gray-100 dark:border-gray-800 overflow-hidden">
+      <div className="bg-white dark:bg-gray-900 rounded-5xl shadow-xl shadow-brand-500/5 dark:shadow-brand-950/20 border border-gray-100 dark:border-gray-800 overflow-hidden">
         {/* Tab Navigation */}
         <div className="flex p-2 bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
           {tabs.map((tab) => (
@@ -130,7 +130,7 @@ const ResultsDashboard = ({ result }) => {
                     </div>
                   </div>
                   
-                  <div className="bg-gray-900 dark:bg-black p-8 md:p-10 rounded-[2rem] shadow-2xl border border-white/5">
+                  <div className="bg-gray-900 dark:bg-black p-8 md:p-10 rounded-4xl shadow-2xl border border-white/5">
                     <p className="text-gray-100 dark:text-gray-200 text-xl leading-relaxed italic font-serif">
                       "{result.translated_content || "Translation not available."}"
                     </p>
@@ -193,7 +193,7 @@ const ResultsDashboard = ({ result }) => {
                                 {ent.label}
                               </span>
                             </div>
-                            <div className="md:flex-grow">
+                            <div className="md:grow">
                               <span className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Context</span>
                               <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">{ent.description}</p>
                             </div>
@@ -208,7 +208,7 @@ const ResultsDashboard = ({ result }) => {
               {/* Questions Tab */}
               {activeTab === 'questions' && (
                 <div className="space-y-12">
-                  <div className="bg-brand-600 dark:bg-brand-700 p-8 rounded-[2rem] text-white flex flex-col md:flex-row items-center gap-8">
+                  <div className="bg-brand-600 dark:bg-brand-700 p-8 rounded-4xl text-white flex flex-col md:flex-row items-center gap-8">
                     <div className="bg-white/20 p-6 rounded-3xl">
                       <Trophy className="w-12 h-12 text-white" />
                     </div>
@@ -226,7 +226,7 @@ const ResultsDashboard = ({ result }) => {
                       return (
                         <div key={qId} className="group bg-white dark:bg-gray-800 border-2 border-gray-50 dark:border-gray-700 rounded-3xl p-8 transition-all hover:border-brand-200 dark:hover:border-brand-700 hover:shadow-xl hover:shadow-brand-500/5 dark:hover:shadow-black/20">
                           <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-8">
-                            <div className="flex-grow">
+                            <div className="grow">
                               <span className="text-[10px] font-black text-brand-500 uppercase tracking-[0.2em] mb-3 block">Question {idx + 1}</span>
                               <h4 className="text-xl font-bold text-gray-900 dark:text-white leading-relaxed">{q.question}</h4>
                             </div>

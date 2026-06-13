@@ -163,7 +163,7 @@ const History = () => {
           ))}
         </div>
       ) : sessions.length === 0 ? (
-        <div className="text-center py-24 bg-white dark:bg-gray-900 rounded-[3rem] border-2 border-dashed border-gray-100 dark:border-gray-800">
+        <div className="text-center py-24 bg-white dark:bg-gray-900 rounded-7xl border-2 border-dashed border-gray-100 dark:border-gray-800">
           <div className="bg-gray-50 dark:bg-gray-800 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6">
             <HistoryIcon className="w-10 h-10 text-gray-300 dark:text-gray-600" />
           </div>
@@ -185,7 +185,7 @@ const History = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="group bg-white dark:bg-gray-900 border-2 border-gray-50 dark:border-gray-800 rounded-[2rem] p-8 shadow-sm hover:shadow-xl hover:shadow-brand-500/5 dark:hover:shadow-black/20 hover:-translate-y-1 transition-all flex flex-col justify-between"
+              className="group bg-white dark:bg-gray-900 border-2 border-gray-50 dark:border-gray-800 rounded-4xl p-8 shadow-sm hover:shadow-xl hover:shadow-brand-500/5 dark:hover:shadow-black/20 hover:-translate-y-1 transition-all flex flex-col justify-between"
             >
               <div>
                 <div className="flex justify-between items-start mb-6">
@@ -274,7 +274,7 @@ const History = () => {
       {/* Modern Modal Overlay */}
       <AnimatePresence>
         {isModalOpen && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -286,7 +286,7 @@ const History = () => {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative bg-[var(--bg)] w-full max-w-6xl h-[90vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col border border-white/10 dark:border-white/5"
+              className="relative bg-(--bg) w-full max-w-6xl h-[90vh] rounded-7xl shadow-2xl overflow-hidden flex flex-col border border-white/10 dark:border-white/5"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Header */}
@@ -310,7 +310,7 @@ const History = () => {
               </div>
 
               {/* Modal Body */}
-              <div className="flex-grow overflow-y-auto p-10 custom-scrollbar">
+              <div className="grow overflow-y-auto p-10 custom-scrollbar">
                 {modalLoading ? (
                   <div className="h-full flex flex-col items-center justify-center space-y-6">
                     <div className="relative">

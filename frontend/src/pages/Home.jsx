@@ -114,7 +114,7 @@ const Home = () => {
             <div className="bg-red-100 dark:bg-red-900/50 p-2 rounded-lg">
               <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
             </div>
-            <div className="flex-grow">
+            <div className="grow">
               <h3 className="font-bold text-red-900 dark:text-red-100 mb-1">Processing Error</h3>
               <p className="text-red-700 dark:text-red-300">{error}</p>
               <button 
