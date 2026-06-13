@@ -1,4 +1,19 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  FileText, 
+  Languages, 
+  Key, 
+  HelpCircle, 
+  Clock, 
+  BookOpen, 
+  ChevronRight, 
+  ChevronDown,
+  Info,
+  CheckCircle2,
+  Trophy,
+  Globe
+} from 'lucide-react';
 
 const ResultsDashboard = ({ result }) => {
   const [activeTab, setActiveTab] = useState('summary');
@@ -6,222 +21,253 @@ const ResultsDashboard = ({ result }) => {
 
   if (!result) return null;
 
-  const toggleAnswer = (qIndex) => {
-    setShowAnswers(prev => ({ ...prev, [qIndex]: !prev[qIndex] }));
+  const toggleAnswer = (qId) => {
+    setShowAnswers(prev => ({ ...prev, [qId]: !prev[qId] }));
   };
 
   const getDifficultyColor = (diff) => {
     switch (diff?.toLowerCase()) {
-      case 'easy': return 'bg-green-100 text-green-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      case 'hard': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'easy': return 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border-green-100 dark:border-green-800';
+      case 'medium': return 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-100 dark:border-amber-800';
+      case 'hard': return 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border-red-100 dark:border-red-800';
+      default: return 'bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-100 dark:border-gray-700';
     }
   };
 
   const tabs = [
-    { id: 'summary', label: 'Summary', icon: '📝' },
-    { id: 'translation', label: 'Translation', icon: '🌐' },
-    { id: 'keywords', label: 'Keywords', icon: '🔑' },
-    { id: 'questions', label: 'Questions', icon: '❓' },
+    { id: 'summary', label: 'Summary', icon: <FileText className="w-4 h-4" /> },
+    { id: 'translation', label: 'Translation', icon: <Languages className="w-4 h-4" /> },
+    { id: 'keywords', label: 'Concepts', icon: <Key className="w-4 h-4" /> },
+    { id: 'questions', label: 'Quiz', icon: <HelpCircle className="w-4 h-4" /> },
   ];
 
   return (
-    <div className="w-full space-y-6 animate-fade-in">
-      {/* 1. Stats Bar */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-wrap gap-4 items-center justify-between">
-        <div className="flex gap-2">
-          <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold uppercase">
-            Detected: {result.language?.name || 'N/A'}
-          </span>
-          <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-bold uppercase">
-            Target: {result.target_language || 'ta'}
-          </span>
-        </div>
-        <div className="flex gap-6 text-sm text-gray-600 font-medium">
-          <div className="flex items-center gap-2">
-            <span>⏱️</span> {result.processing_time_seconds || 0}s
+    <div className="w-full space-y-8 animate-fade-in">
+      {/* 1. Stats Overview */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Detected Language', value: result.language?.name || 'Unknown', icon: <Languages className="w-5 h-5 text-brand-500" />, bg: 'bg-brand-50 dark:bg-brand-900/20' },
+          { label: 'Target Language', value: result.target_language || 'ta', icon: <Globe className="w-5 h-5 text-blue-500" />, bg: 'bg-blue-50 dark:bg-blue-900/20' },
+          { label: 'Processing Time', value: `${result.processing_time_seconds || 0}s`, icon: <Clock className="w-5 h-5 text-amber-500" />, bg: 'bg-amber-50 dark:bg-amber-900/20' },
+          { label: 'Quiz Questions', value: result.questions?.length || 0, icon: <Trophy className="w-5 h-5 text-emerald-500" />, bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
+        ].map((stat, i) => (
+          <div key={i} className={`${stat.bg} p-4 rounded-2xl border border-white/50 dark:border-white/5 shadow-sm flex items-center space-x-4`}>
+            <div className="bg-white dark:bg-gray-800 p-2.5 rounded-xl shadow-sm">{stat.icon}</div>
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{stat.label}</p>
+              <p className="text-sm font-extrabold text-gray-900 dark:text-white">{stat.value}</p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span>📚</span> {result.questions?.length || 0} Questions
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* 2. Tab Navigation */}
-      <div className="bg-white rounded-xl shadow-md border border-gray-100 overflow-hidden">
-        <div className="flex border-b border-gray-100 bg-gray-50/50">
+      {/* 2. Main Content Card */}
+      <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] shadow-xl shadow-brand-500/5 dark:shadow-brand-950/20 border border-gray-100 dark:border-gray-800 overflow-hidden">
+        {/* Tab Navigation */}
+        <div className="flex p-2 bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 py-4 px-6 text-sm font-bold transition-all duration-200 flex items-center justify-center gap-2
+              className={`flex-1 flex items-center justify-center space-x-2 py-4 rounded-2xl text-sm font-bold transition-all duration-300
                 ${activeTab === tab.id 
-                  ? 'text-blue-600 border-b-2 border-blue-600 bg-white' 
-                  : 'text-gray-500 hover:text-blue-500 hover:bg-gray-100/50'}`}
+                  ? 'bg-white dark:bg-gray-700 text-brand-600 dark:text-brand-400 shadow-md scale-[1.02]' 
+                  : 'text-gray-500 hover:text-brand-500 hover:bg-white/50 dark:hover:bg-gray-700/50'}`}
             >
-              <span>{tab.icon}</span>
-              {tab.label}
+              {tab.icon}
+              <span>{tab.label}</span>
             </button>
           ))}
         </div>
 
         {/* Tab Content */}
-        <div className="p-8">
-          {/* Summary Tab */}
-          {activeTab === 'summary' && (
-            <div className="space-y-8">
-              <div className="bg-blue-50/30 p-6 rounded-2xl border border-blue-100">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">Lecture Summary</h3>
-                <p className="text-gray-700 leading-relaxed">
-                  {result.summary || "Summary not available."}
-                </p>
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-gray-800 mb-4">Key Takeaways</h3>
-                <ul className="space-y-3">
-                  {result.bullet_notes?.map((note, idx) => (
-                    <li key={idx} className="flex items-start gap-3 text-gray-700">
-                      <span className="text-blue-500 mt-1">•</span>
-                      <span>{note.replace('• ', '')}</span>
-                    </li>
-                  )) || <p className="text-gray-500">No bullet notes available.</p>}
-                </ul>
-              </div>
-            </div>
-          )}
-
-          {/* Translation Tab */}
-          {activeTab === 'translation' && (
-            <div className="space-y-8">
-              <div>
-                <h3 className="text-xl font-bold text-gray-800 mb-4">
-                  Translated Content ({result.target_language || 'ta'})
-                </h3>
-                <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200">
-                  <p className="text-gray-800 leading-relaxed italic">
-                    {result.translated_content || "Translation not available."}
-                  </p>
-                </div>
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Concept Mapping</h4>
-                <div className="flex flex-wrap gap-2">
-                  {result.translated_keywords?.map((kw, idx) => (
-                    <div key={idx} className="bg-white border border-gray-200 rounded-lg px-3 py-2 shadow-sm flex items-center gap-2">
-                      <span className="text-xs font-medium text-gray-400">{kw.keyword}</span>
-                      <span className="text-blue-600 font-bold">→</span>
-                      <span className="text-sm font-bold text-gray-800">{kw.translated}</span>
-                    </div>
-                  )) || <p className="text-gray-500">No keywords available.</p>}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Keywords Tab */}
-          {activeTab === 'keywords' && (
-            <div className="space-y-10">
-              <div>
-                <h3 className="text-lg font-bold text-gray-800 mb-6">Important Keywords</h3>
-                <div className="flex flex-wrap gap-3">
-                  {result.concepts?.keywords?.map((kw, idx) => (
-                    <div key={idx} className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-full border border-indigo-100 flex items-center gap-2 shadow-sm">
-                      <span className="font-bold">{kw.keyword}</span>
-                      <span className="text-[10px] bg-indigo-200/50 px-1.5 py-0.5 rounded font-mono">
-                        {(kw.score * 10).toFixed(1)}
-                      </span>
-                    </div>
-                  )) || <p className="text-gray-500">No keywords extracted.</p>}
-                </div>
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-gray-800 mb-4">Named Entities</h3>
-                <div className="overflow-x-auto border border-gray-100 rounded-xl shadow-sm">
-                  <table className="w-full text-left">
-                    <thead className="bg-gray-50 border-b border-gray-100">
-                      <tr>
-                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Entity</th>
-                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Label</th>
-                        <th className="px-6 py-3 text-xs font-bold text-gray-500 uppercase">Description</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {result.concepts?.entities?.map((ent, idx) => (
-                        <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
-                          <td className="px-6 py-4 font-bold text-gray-800">{ent.text}</td>
-                          <td className="px-6 py-4">
-                            <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-mono uppercase">
-                              {ent.label}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-500">{ent.description}</td>
-                        </tr>
-                      )) || <tr><td colSpan="3" className="px-6 py-4 text-center text-gray-500">No entities found.</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Questions Tab */}
-          {activeTab === 'questions' && (
-            <div className="space-y-10">
-              {['definition', 'fill_blank', 'true_false'].map((type) => {
-                const filteredQs = result.questions?.filter(q => q.type === type) || [];
-                if (filteredQs.length === 0) return null;
-
-                const typeLabels = {
-                  definition: 'Definition Questions',
-                  fill_blank: 'Fill in the Blanks',
-                  true_false: 'True or False'
-                };
-
-                return (
-                  <div key={type} className="space-y-4">
-                    <h3 className="text-lg font-extrabold text-gray-800 border-l-4 border-blue-500 pl-3">
-                      {typeLabels[type]}
-                    </h3>
-                    <div className="grid gap-4">
-                      {filteredQs.map((q, idx) => {
-                        const qId = `${type}-${idx}`;
-                        return (
-                          <div key={qId} className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
-                            <div className="flex justify-between items-start gap-4 mb-4">
-                              <p className="text-gray-800 font-medium leading-relaxed">{q.question}</p>
-                              <span className={`flex-shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${getDifficultyColor(q.difficulty)}`}>
-                                {q.difficulty}
-                              </span>
-                            </div>
-                            <div className="flex flex-col gap-3">
-                              <button
-                                onClick={() => toggleAnswer(qId)}
-                                className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 w-fit"
-                              >
-                                {showAnswers[qId] ? 'Hide Answer ↑' : 'Show Answer ↓'}
-                              </button>
-                              {showAnswers[qId] && (
-                                <div className="p-3 bg-gray-50 rounded-lg border-l-2 border-green-400 animate-slide-down">
-                                  <p className="text-sm font-bold text-gray-500 mb-1 uppercase text-[9px]">Answer</p>
-                                  <p className="text-gray-800 font-semibold">{q.answer}</p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+        <div className="p-8 md:p-12">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              {/* Summary Tab */}
+              {activeTab === 'summary' && (
+                <div className="space-y-12">
+                  <div className="relative">
+                    <div className="absolute -left-6 top-0 bottom-0 w-1.5 bg-brand-500 rounded-full" />
+                    <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-6">Executive Summary</h3>
+                    <div className="bg-brand-50/30 dark:bg-brand-900/10 p-8 rounded-3xl border border-brand-100 dark:border-brand-900/50 text-lg text-gray-700 dark:text-gray-300 leading-relaxed font-medium">
+                      {result.summary || "No summary available."}
                     </div>
                   </div>
-                );
-              })}
-              {(!result.questions || result.questions.length === 0) && (
-                <div className="text-center py-12 text-gray-500">
-                  <p>No review questions generated for this lecture.</p>
+                  
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center space-x-2">
+                      <BookOpen className="w-5 h-5 text-brand-500" />
+                      <span>Key Takeaways</span>
+                    </h3>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {result.bullet_notes?.map((note, idx) => (
+                        <div key={idx} className="flex items-start space-x-4 p-5 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
+                          <div className="bg-brand-50 dark:bg-brand-900/30 p-1.5 rounded-lg mt-0.5">
+                            <CheckCircle2 className="w-4 h-4 text-brand-500" />
+                          </div>
+                          <span className="text-gray-700 dark:text-gray-300 font-medium leading-relaxed">{note.replace('• ', '')}</span>
+                        </div>
+                      )) || <p className="text-gray-500">No takeaways available.</p>}
+                    </div>
+                  </div>
                 </div>
               )}
-            </div>
-          )}
+
+              {/* Translation Tab */}
+              {activeTab === 'translation' && (
+                <div className="space-y-10">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-2xl font-black text-gray-900 dark:text-white">Translation</h3>
+                    <div className="px-4 py-1.5 bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 rounded-full text-xs font-bold uppercase tracking-widest border border-brand-100 dark:border-brand-900/50">
+                      Target: {result.target_language || 'ta'}
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gray-900 dark:bg-black p-8 md:p-10 rounded-[2rem] shadow-2xl border border-white/5">
+                    <p className="text-gray-100 dark:text-gray-200 text-xl leading-relaxed italic font-serif">
+                      "{result.translated_content || "Translation not available."}"
+                    </p>
+                  </div>
+
+                  {result.translated_keywords?.length > 0 && (
+                    <div className="space-y-6">
+                      <h4 className="text-sm font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">Vocabulary Match</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {result.translated_keywords.map((kw, idx) => (
+                          <div key={idx} className="bg-white dark:bg-gray-800 border-2 border-gray-50 dark:border-gray-700 rounded-2xl p-4 flex items-center justify-between group hover:border-brand-200 dark:hover:border-brand-800 transition-colors">
+                            <span className="text-sm font-bold text-gray-400 dark:text-gray-500">{kw.keyword}</span>
+                            <ChevronRight className="w-4 h-4 text-brand-300 group-hover:translate-x-1 transition-transform" />
+                            <span className="text-base font-black text-brand-600 dark:text-brand-400">{kw.translated}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Keywords Tab */}
+              {activeTab === 'keywords' && (
+                <div className="space-y-12">
+                  <div>
+                    <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-8">Core Concepts</h3>
+                    <div className="flex flex-wrap gap-4">
+                      {result.concepts?.keywords?.map((kw, idx) => (
+                        <div key={idx} className="group relative">
+                          <div className="absolute inset-0 bg-brand-500 rounded-2xl blur-md opacity-0 group-hover:opacity-20 transition-opacity" />
+                          <div className="relative bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 px-6 py-4 rounded-2xl flex items-center space-x-4 shadow-sm group-hover:border-brand-300 dark:group-hover:border-brand-700 transition-all">
+                            <span className="text-lg font-bold text-gray-800 dark:text-gray-200">{kw.keyword}</span>
+                            <div className="h-8 w-px bg-gray-100 dark:bg-gray-700" />
+                            <span className="text-xs font-black text-brand-500 bg-brand-50 dark:bg-brand-900/30 px-2 py-1 rounded-lg">
+                              {(kw.score * 10).toFixed(1)}
+                            </span>
+                          </div>
+                        </div>
+                      )) || <p className="text-gray-500">No keywords extracted.</p>}
+                    </div>
+                  </div>
+
+                  {result.concepts?.entities?.length > 0 && (
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center space-x-2">
+                        <Info className="w-5 h-5 text-brand-500" />
+                        <span>Identified Entities</span>
+                      </h3>
+                      <div className="grid gap-4">
+                        {result.concepts.entities.map((ent, idx) => (
+                          <div key={idx} className="bg-gray-50/50 dark:bg-gray-800/50 rounded-2xl p-6 border border-gray-100 dark:border-gray-700 flex flex-col md:flex-row md:items-center gap-6">
+                            <div className="md:w-1/4">
+                              <span className="text-xs font-black text-brand-400 uppercase tracking-widest mb-1 block">Entity</span>
+                              <p className="text-lg font-black text-gray-900 dark:text-white">{ent.text}</p>
+                            </div>
+                            <div className="md:w-1/4">
+                              <span className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Category</span>
+                              <span className="px-3 py-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full text-[10px] font-black text-gray-600 dark:text-gray-300">
+                                {ent.label}
+                              </span>
+                            </div>
+                            <div className="md:flex-grow">
+                              <span className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1 block">Context</span>
+                              <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">{ent.description}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Questions Tab */}
+              {activeTab === 'questions' && (
+                <div className="space-y-12">
+                  <div className="bg-brand-600 dark:bg-brand-700 p-8 rounded-[2rem] text-white flex flex-col md:flex-row items-center gap-8">
+                    <div className="bg-white/20 p-6 rounded-3xl">
+                      <Trophy className="w-12 h-12 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-black mb-2">Knowledge Check</h3>
+                      <p className="text-brand-100 font-medium opacity-90">
+                        We've generated {result.questions?.length || 0} questions to test your understanding of the material.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-6">
+                    {result.questions?.map((q, idx) => {
+                      const qId = `q-${idx}`;
+                      return (
+                        <div key={qId} className="group bg-white dark:bg-gray-800 border-2 border-gray-50 dark:border-gray-700 rounded-3xl p-8 transition-all hover:border-brand-200 dark:hover:border-brand-700 hover:shadow-xl hover:shadow-brand-500/5 dark:hover:shadow-black/20">
+                          <div className="flex flex-col md:flex-row md:items-start justify-between gap-6 mb-8">
+                            <div className="flex-grow">
+                              <span className="text-[10px] font-black text-brand-500 uppercase tracking-[0.2em] mb-3 block">Question {idx + 1}</span>
+                              <h4 className="text-xl font-bold text-gray-900 dark:text-white leading-relaxed">{q.question}</h4>
+                            </div>
+                            <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${getDifficultyColor(q.difficulty)}`}>
+                              {q.difficulty}
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-4">
+                            <button
+                              onClick={() => toggleAnswer(qId)}
+                              className="flex items-center space-x-2 text-sm font-black text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition-colors"
+                            >
+                              <span>{showAnswers[qId] ? 'Hide Answer' : 'Reveal Answer'}</span>
+                              {showAnswers[qId] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            </button>
+                            
+                            <AnimatePresence>
+                              {showAnswers[qId] && (
+                                <motion.div
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: 'auto', opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="p-6 bg-emerald-50 dark:bg-emerald-950/20 rounded-2xl border-2 border-emerald-100 dark:border-emerald-900/50">
+                                    <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-2">Correct Answer</p>
+                                    <p className="text-lg font-bold text-emerald-900 dark:text-emerald-100">{q.answer}</p>
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
     </div>
