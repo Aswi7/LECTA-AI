@@ -135,33 +135,43 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
     const dataArray = new Uint8Array(bufferLength);
 
     const draw = () => {
-      animationFrameRef.current = requestAnimationFrame(draw);
-      analyser.getByteFrequencyData(dataArray);
+      if (!canvasRef.current || !analyserRef.current) {
+        animationFrameRef.current = null;
+        return;
+      }
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      animationFrameRef.current = requestAnimationFrame(draw);
+      
+      const currentCanvas = canvasRef.current;
+      const currentCtx = currentCanvas.getContext('2d');
+      const currentAnalyser = analyserRef.current;
+      
+      currentAnalyser.getByteFrequencyData(dataArray);
+
+      currentCtx.clearRect(0, 0, currentCanvas.width, currentCanvas.height);
 
       // Draw background grid lines
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
-      ctx.lineWidth = 1;
+      currentCtx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+      currentCtx.lineWidth = 1;
       
       // Horizontal grid lines
       const horizontalLines = 5;
       for (let i = 1; i < horizontalLines; i++) {
-        const y = (canvas.height / horizontalLines) * i;
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
+        const y = (currentCanvas.height / horizontalLines) * i;
+        currentCtx.beginPath();
+        currentCtx.moveTo(0, y);
+        currentCtx.lineTo(currentCanvas.width, y);
+        currentCtx.stroke();
       }
       
       // Vertical grid lines
       const verticalLines = 15;
       for (let i = 1; i < verticalLines; i++) {
-        const x = (canvas.width / verticalLines) * i;
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
+        const x = (currentCanvas.width / verticalLines) * i;
+        currentCtx.beginPath();
+        currentCtx.moveTo(x, 0);
+        currentCtx.lineTo(x, currentCanvas.height);
+        currentCtx.stroke();
       }
 
       // Check if there is actual input audio
@@ -180,46 +190,46 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
       ];
 
       waves.forEach(w => {
-        ctx.beginPath();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = w.color;
+        currentCtx.beginPath();
+        currentCtx.lineWidth = 2;
+        currentCtx.strokeStyle = w.color;
         
-        for (let x = 0; x < canvas.width; x++) {
+        for (let x = 0; x < currentCanvas.width; x++) {
           // Boost amplitude dynamically based on voice activity
           const dynamicAmp = w.amp * (1 + activity * 2);
-          const y = (canvas.height / 2) + 
+          const y = (currentCanvas.height / 2) + 
                     Math.sin(x * w.freq + time * w.speed) * dynamicAmp * Math.sin(time * 0.2);
           if (x === 0) {
-            ctx.moveTo(x, y);
+            currentCtx.moveTo(x, y);
           } else {
-            ctx.lineTo(x, y);
+            currentCtx.lineTo(x, y);
           }
         }
-        ctx.stroke();
+        currentCtx.stroke();
       });
 
       // 2. Draw active audio frequency bars in front (if volume is above baseline threshold)
       if (average > 1.5) {
-        const barWidth = (canvas.width / bufferLength) * 2;
+        const barWidth = (currentCanvas.width / bufferLength) * 2;
         let x = 0;
 
         for (let i = 0; i < bufferLength; i++) {
-          const barHeight = (dataArray[i] / 255) * canvas.height;
+          const barHeight = (dataArray[i] / 255) * currentCanvas.height;
           
           // Only draw visible bars
           if (barHeight > 1) {
-            const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
+            const gradient = currentCtx.createLinearGradient(0, currentCanvas.height, 0, 0);
             gradient.addColorStop(0, 'rgba(99, 102, 241, 0.85)');
             gradient.addColorStop(1, 'rgba(168, 85, 247, 0.85)');
             
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            if (typeof ctx.roundRect === 'function') {
-              ctx.roundRect(x, (canvas.height - barHeight) / 2, barWidth, barHeight, 4);
+            currentCtx.fillStyle = gradient;
+            currentCtx.beginPath();
+            if (typeof currentCtx.roundRect === 'function') {
+              currentCtx.roundRect(x, (currentCanvas.height - barHeight) / 2, barWidth, barHeight, 4);
             } else {
-              ctx.rect(x, (canvas.height - barHeight) / 2, barWidth, barHeight);
+              currentCtx.rect(x, (currentCanvas.height - barHeight) / 2, barWidth, barHeight);
             }
-            ctx.fill();
+            currentCtx.fill();
           }
 
           x += barWidth + 2;
