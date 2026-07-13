@@ -28,12 +28,50 @@ from config import CONFIG
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Languages Mapping
+LANGUAGES_MAP = {
+    'en': 'English',
+    'ta': 'Tamil',
+    'hi': 'Hindi',
+    'te': 'Telugu',
+    'kn': 'Kannada',
+    'ml': 'Malayalam',
+    'bn': 'Bengali',
+    'mr': 'Marathi',
+    'gu': 'Gujarati',
+    'pa': 'Punjabi',
+    'ur': 'Urdu'
+}
+
+# Register Unicode fonts for ReportLab if running on Windows
+def register_unicode_fonts():
+    font_name = 'Helvetica'
+    bold_font_name = 'Helvetica-Bold'
+    
+    font_path = r"C:\Windows\Fonts\Nirmala.ttc"
+    if os.path.exists(font_path):
+        try:
+            from reportlab.pdfbase import pdfmetrics
+            from reportlab.pdfbase.ttfonts import TTFont
+            pdfmetrics.registerFont(TTFont('Nirmala', font_path))
+            pdfmetrics.registerFont(TTFont('Nirmala-Bold', font_path))
+            font_name = 'Nirmala'
+            bold_font_name = 'Nirmala-Bold'
+        except Exception as e:
+            logger.warning(f"Error registering Nirmala font for PDF: {e}")
+            
+    return font_name, bold_font_name
+
+
 def export_as_pdf(session_data: Dict[str, Any], output_path: str) -> str:
     """Generates a structured PDF lecture notes document."""
     logger.info(f"Generating PDF for session {session_data.get('session_id')} at {output_path}")
     
     doc = SimpleDocTemplate(output_path, pagesize=letter)
     styles = getSampleStyleSheet()
+    
+    # Register and setup font
+    font_name, bold_font_name = register_unicode_fonts()
     
     # Custom Styles
     styles.add(ParagraphStyle(
@@ -43,6 +81,14 @@ def export_as_pdf(session_data: Dict[str, Any], output_path: str) -> str:
         leftIndent=20
     ))
     
+    # Update stylesheet to use Unicode-capable fonts
+    for style_name in list(styles.byName.keys()):
+        orig_font = styles[style_name].fontName or ""
+        if "Bold" in orig_font:
+            styles[style_name].fontName = bold_font_name
+        else:
+            styles[style_name].fontName = font_name
+            
     story = []
     
     # Header: Colored Bar and Title
@@ -66,7 +112,8 @@ def export_as_pdf(session_data: Dict[str, Any], output_path: str) -> str:
     
     # Languages
     detected_lang = session_data.get('language', {}).get('name', 'Not available')
-    target_lang = session_data.get('target_language', 'Not available')
+    target_lang_code = session_data.get('target_language')
+    target_lang = LANGUAGES_MAP.get(target_lang_code, target_lang_code).upper() if target_lang_code else 'Not available'
     story.append(Paragraph(f"<b>Detected Language:</b> {detected_lang}", styles['Normal']))
     story.append(Paragraph(f"<b>Target Language:</b> {target_lang}", styles['Normal']))
     story.append(Spacer(1, 12))
@@ -145,7 +192,8 @@ def export_as_docx(session_data: Dict[str, Any], output_path: str) -> str:
     doc.add_paragraph(f"Generated: {gen_date}")
     
     detected_lang = session_data.get('language', {}).get('name', 'Not available')
-    target_lang = session_data.get('target_language', 'Not available')
+    target_lang_code = session_data.get('target_language')
+    target_lang = LANGUAGES_MAP.get(target_lang_code, target_lang_code).upper() if target_lang_code else 'Not available'
     doc.add_paragraph(f"Detected Language: {detected_lang}")
     doc.add_paragraph(f"Target Language: {target_lang}")
     

@@ -112,6 +112,26 @@ def run_ai_modules(cleaned_text, sentences, target_language):
         
     return results
 
+def generate_topic_name(concepts, default_filename):
+    """Generates a lecture topic name from concepts or cleaned filename."""
+    base_name, _ = os.path.splitext(default_filename)
+    base_name = base_name.replace('_', ' ').replace('-', ' ').strip()
+    
+    # Generic names that don't represent a real topic
+    generic_patterns = ['live', 'recording', 'audio', 'text', 'input', 'untitled']
+    is_generic = not base_name or any(p in base_name.lower() for p in generic_patterns)
+    
+    if is_generic:
+        noun_phrases = concepts.get("noun_phrases", [])
+        if noun_phrases:
+            return noun_phrases[0].title()
+        keywords = concepts.get("keywords", [])
+        if keywords:
+            return keywords[0]["keyword"].title()
+            
+    return base_name.title() if base_name else "Untitled Lecture"
+
+
 @app.route('/api/process', methods=['POST'])
 def process_audio():
     start_time = time.time()
@@ -156,10 +176,14 @@ def process_audio():
         ai_results = run_ai_modules(cleaned_text, sentences, target_language)
         pipeline_steps.extend(["summarization", "keyword_extraction", "question_generation", "translation"])
         
+        # Determine topic name
+        topic_name = generate_topic_name(ai_results.get("concepts", {}), filename)
+        
         # Combine all results
         full_response = {
             "session_id": session_id,
-            "filename": filename,
+            "filename": topic_name,
+            "target_language": target_language,
             "transcript": transcript,
             "cleaned_text": cleaned_text,
             "language": lang_data,
@@ -223,10 +247,14 @@ def process_url():
         ai_results = run_ai_modules(cleaned_text, sentences, target_language)
         pipeline_steps.extend(["summarization", "keyword_extraction", "question_generation", "translation"])
         
+        # Determine topic name
+        topic_name = generate_topic_name(ai_results.get("concepts", {}), filename)
+        
         # Combine all results
         full_response = {
             "session_id": session_id,
-            "filename": filename,
+            "filename": topic_name,
+            "target_language": target_language,
             "transcript": transcript,
             "cleaned_text": cleaned_text,
             "language": lang_data,
@@ -276,9 +304,13 @@ def process_text_api():
         ai_results = run_ai_modules(cleaned_text, sentences, target_language)
         pipeline_steps.extend(["summarization", "keyword_extraction", "question_generation", "translation"])
         
+        # Determine topic name
+        topic_name = generate_topic_name(ai_results.get("concepts", {}), "text_input")
+        
         full_response = {
             "session_id": session_id,
-            "filename": "text_input",
+            "filename": topic_name,
+            "target_language": target_language,
             "transcript": text,
             "cleaned_text": cleaned_text,
             "language": lang_data,
