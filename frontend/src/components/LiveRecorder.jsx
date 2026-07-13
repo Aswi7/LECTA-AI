@@ -140,26 +140,90 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      const barWidth = (canvas.width / bufferLength) * 2;
-      let x = 0;
-
-      for (let i = 0; i < bufferLength; i++) {
-        const barHeight = (dataArray[i] / 255) * canvas.height;
-        
-        const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
-        gradient.addColorStop(0, '#6366f1');
-        gradient.addColorStop(1, '#a855f7');
-        
-        ctx.fillStyle = gradient;
+      // Draw background grid lines
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+      ctx.lineWidth = 1;
+      
+      // Horizontal grid lines
+      const horizontalLines = 5;
+      for (let i = 1; i < horizontalLines; i++) {
+        const y = (canvas.height / horizontalLines) * i;
         ctx.beginPath();
-        if (typeof ctx.roundRect === 'function') {
-          ctx.roundRect(x, (canvas.height - barHeight) / 2, barWidth, barHeight, 4);
-        } else {
-          ctx.rect(x, (canvas.height - barHeight) / 2, barWidth, barHeight);
-        }
-        ctx.fill();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+      
+      // Vertical grid lines
+      const verticalLines = 15;
+      for (let i = 1; i < verticalLines; i++) {
+        const x = (canvas.width / verticalLines) * i;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
 
-        x += barWidth + 2;
+      // Check if there is actual input audio
+      const sum = dataArray.reduce((a, b) => a + b, 0);
+      const average = sum / bufferLength;
+
+      // Calculate voice activity factor (0 to 1) to dynamically scale the background waves
+      const activity = Math.min(1.0, Math.max(0.0, (average - 1.5) / 15));
+
+      // 1. Draw beautiful animated flowing sine waves (always visible, scales with sound)
+      const time = Date.now() * 0.003;
+      const waves = [
+        { freq: 0.008, amp: 20, speed: 1.0, color: 'rgba(99, 102, 241, 0.4)' },
+        { freq: 0.015, amp: 12, speed: -1.2, color: 'rgba(168, 85, 247, 0.3)' },
+        { freq: 0.005, amp: 8,  speed: 0.8, color: 'rgba(236, 72, 153, 0.2)' }
+      ];
+
+      waves.forEach(w => {
+        ctx.beginPath();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = w.color;
+        
+        for (let x = 0; x < canvas.width; x++) {
+          // Boost amplitude dynamically based on voice activity
+          const dynamicAmp = w.amp * (1 + activity * 2);
+          const y = (canvas.height / 2) + 
+                    Math.sin(x * w.freq + time * w.speed) * dynamicAmp * Math.sin(time * 0.2);
+          if (x === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+        ctx.stroke();
+      });
+
+      // 2. Draw active audio frequency bars in front (if volume is above baseline threshold)
+      if (average > 1.5) {
+        const barWidth = (canvas.width / bufferLength) * 2;
+        let x = 0;
+
+        for (let i = 0; i < bufferLength; i++) {
+          const barHeight = (dataArray[i] / 255) * canvas.height;
+          
+          // Only draw visible bars
+          if (barHeight > 1) {
+            const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
+            gradient.addColorStop(0, 'rgba(99, 102, 241, 0.85)');
+            gradient.addColorStop(1, 'rgba(168, 85, 247, 0.85)');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            if (typeof ctx.roundRect === 'function') {
+              ctx.roundRect(x, (canvas.height - barHeight) / 2, barWidth, barHeight, 4);
+            } else {
+              ctx.rect(x, (canvas.height - barHeight) / 2, barWidth, barHeight);
+            }
+            ctx.fill();
+          }
+
+          x += barWidth + 2;
+        }
       }
     };
 
@@ -281,8 +345,17 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
               </span>
             </div>
 
-            <div className="bg-gray-900 dark:bg-black p-8 rounded-4xl shadow-2xl border-4 border-gray-800 dark:border-gray-900">
-              <canvas ref={canvasRef} width="800" height="120" className="w-full h-32" />
+            <div className="relative overflow-hidden bg-gradient-to-br from-gray-950 to-gray-900 p-8 rounded-4xl shadow-2xl border-2 border-gray-800/80 shadow-brand-500/10">
+              {/* Decorative ambient glowing circles */}
+              <div className="absolute -top-24 -left-24 w-48 h-48 bg-brand-500/10 rounded-full blur-3xl" />
+              <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl" />
+              
+              <canvas ref={canvasRef} width="800" height="120" className="w-full h-32 relative z-10" />
+              
+              {/* Oscilloscope watermark */}
+              <div className="absolute bottom-3 right-5 text-[9px] font-mono font-bold tracking-widest text-gray-700 select-none z-20">
+                LECTA AUDIO CORE v1.0
+              </div>
             </div>
 
             <div className="flex justify-center items-center gap-6">
