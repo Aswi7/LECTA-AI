@@ -83,11 +83,13 @@ def export_as_pdf(session_data: Dict[str, Any], output_path: str) -> str:
     
     # Update stylesheet to use Unicode-capable fonts
     for style_name in list(styles.byName.keys()):
-        orig_font = styles[style_name].fontName or ""
-        if "Bold" in orig_font:
-            styles[style_name].fontName = bold_font_name
-        else:
-            styles[style_name].fontName = font_name
+        style = styles[style_name]
+        if hasattr(style, 'fontName'):
+            orig_font = style.fontName or ""
+            if "Bold" in orig_font:
+                style.fontName = bold_font_name
+            else:
+                style.fontName = font_name
             
     story = []
     
