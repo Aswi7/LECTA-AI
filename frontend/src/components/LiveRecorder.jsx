@@ -355,7 +355,7 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
               </span>
             </div>
 
-            <div className="relative overflow-hidden bg-gradient-to-br from-gray-950 to-gray-900 p-8 rounded-4xl shadow-2xl border-2 border-gray-800/80 shadow-brand-500/10">
+            <div className="relative overflow-hidden bg-linear-to-br from-gray-950 to-gray-900 p-8 rounded-4xl shadow-2xl border-2 border-gray-800/80 shadow-brand-500/10">
               {/* Decorative ambient glowing circles */}
               <div className="absolute -top-24 -left-24 w-48 h-48 bg-brand-500/10 rounded-full blur-3xl" />
               <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl" />

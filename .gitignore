@@ -8,3 +8,21 @@ node_modules/
 # build folders
 dist/
 build/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# Audio/video uploads & exports
+backend/backend/uploads/
+backend/exports/
+exports/
+outputs/
+*.mp3
+*.wav
+*.pdf
+*.docx
+*.txt

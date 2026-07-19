@@ -55,10 +55,10 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def download_audio_from_url(url, session_id):
-    """Downloads audio from a URL (YouTube, etc.) using yt-dlp."""
+    """Downloads audio from a URL (YouTube, etc.) using yt-dlp with browser cookies."""
     output_path = os.path.join(CONFIG.UPLOAD_FOLDER, f"{session_id}_downloaded")
     
-    ydl_opts = {
+    ydl_opts_cookies = {
         'format': 'bestaudio/best',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
@@ -68,12 +68,36 @@ def download_audio_from_url(url, session_id):
         'outtmpl': output_path + '.%(ext)s',
         'quiet': True,
         'no_warnings': True,
+        'cookiesfrombrowser': ('chrome', 'firefox', 'edge', 'opera', 'brave', 'safari', 'vivaldi'),
+        'nocheckcertificate': True,
     }
     
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        filename = f"{session_id}_downloaded.mp3"
-        return os.path.join(CONFIG.UPLOAD_FOLDER, filename), info.get('title', 'Downloaded Video')
+    logger.info("Attempting to download audio using browser cookies extraction...")
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts_cookies) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = f"{session_id}_downloaded.mp3"
+            return os.path.join(CONFIG.UPLOAD_FOLDER, filename), info.get('title', 'Downloaded Video')
+    except Exception as e:
+        logger.warning(f"Failed to download using browser cookies: {e}. Retrying without cookies...")
+        
+        ydl_opts_no_cookies = {
+            'format': 'bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'outtmpl': output_path + '.%(ext)s',
+            'quiet': True,
+            'no_warnings': True,
+            'nocheckcertificate': True,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts_no_cookies) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = f"{session_id}_downloaded.mp3"
+            return os.path.join(CONFIG.UPLOAD_FOLDER, filename), info.get('title', 'Downloaded Video')
 
 def run_ai_modules(cleaned_text, sentences, target_language):
     """Runs the 4 AI modules in parallel."""
@@ -369,11 +393,25 @@ def download_export(session_id, fmt):
             'txt': 'text/plain'
         }
         
+        # Get filename (topic)
+        topic_filename = session_data.get('filename', 'notes')
+        # Remove any file extension if present (e.g. .mp3, .mp4, .pdf)
+        topic_name, _ = os.path.splitext(topic_filename)
+        
+        # Strip characters that are illegal on common filesystems
+        illegal_chars = set('\\/:*?"<>|')
+        safe_topic_name = "".join(c for c in topic_name if c not in illegal_chars).strip()
+        
+        if not safe_topic_name:
+            safe_topic_name = session_id
+            
+        download_filename = f"{safe_topic_name}.{fmt}"
+        
         return send_file(
             export_path,
             mimetype=mimetypes.get(fmt),
             as_attachment=True,
-            download_name=f"{session_id}_notes.{fmt}"
+            download_name=download_filename
         )
     except Exception as e:
         return jsonify({"error": str(e), "session_id": session_id}), 500

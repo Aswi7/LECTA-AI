@@ -27,6 +27,17 @@ const History = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
 
+  useEffect(() => {
+    if (isModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isModalOpen]);
+
   const fetchHistory = useCallback(async (query = '', pageNum = 1) => {
     setLoading(true);
     setError(null);
@@ -118,7 +129,8 @@ const History = () => {
   };
 
   return (
-    <div className="space-y-10 animate-fade-in">
+    <>
+      <div className="space-y-10 animate-fade-in">
       {/* Header & Search */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
@@ -270,6 +282,7 @@ const History = () => {
           </button>
         </div>
       )}
+      </div>
 
       {/* Modern Modal Overlay */}
       <AnimatePresence>
@@ -286,17 +299,18 @@ const History = () => {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative bg-(--bg) w-full max-w-6xl h-[90vh] rounded-7xl shadow-2xl overflow-hidden flex flex-col border border-white/10 dark:border-white/5"
+              className="relative bg-gray-50 dark:bg-gray-950 w-full max-w-7xl h-[95vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col border border-gray-100 dark:border-gray-800 transition-colors duration-300"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Header */}
-              <div className="px-10 py-8 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+              <div className="px-10 py-6 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between transition-colors duration-300">
                 <div>
-                  <h2 className="text-2xl font-black text-gray-900 dark:text-white truncate max-w-xl">
-                    {modalLoading ? 'Consulting the Vault...' : selectedSession?.filename}
+                  <span className="text-xs font-black text-brand-600 dark:text-brand-400 uppercase tracking-[0.2em]">Study Vault</span>
+                  <h2 className="text-2xl font-black text-gray-900 dark:text-white truncate max-w-2xl mt-1 leading-tight">
+                    {modalLoading ? 'Consulting the Vault...' : selectedSession?.filename || 'Untitled Lecture'}
                   </h2>
                   {!modalLoading && (
-                    <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">
+                    <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest mt-1">
                       Processed on {formatDate(selectedSession?.created_at)}
                     </p>
                   )}
@@ -333,7 +347,7 @@ const History = () => {
           </div>
         )}
       </AnimatePresence>
-    </div>
+    </>
   );
 };
 

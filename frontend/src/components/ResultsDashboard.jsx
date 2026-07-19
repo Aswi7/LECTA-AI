@@ -42,21 +42,20 @@ const ResultsDashboard = ({ result }) => {
   ];
 
   return (
-    <div className="w-full space-y-8 animate-fade-in">
-      {/* 1. Stats Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div className="w-full space-y-6 animate-fade-in">
+      {/* 1. Stats Overview (Compact Badges at Top) */}
+      <div className="flex flex-wrap gap-3 items-center justify-start pb-2">
         {[
-          { label: 'Detected Language', value: result.language?.name || 'Unknown', icon: <Languages className="w-5 h-5 text-brand-500" />, bg: 'bg-brand-50 dark:bg-brand-900/20' },
-          { label: 'Target Language', value: result.target_language || 'ta', icon: <Globe className="w-5 h-5 text-blue-500" />, bg: 'bg-blue-50 dark:bg-blue-900/20' },
-          { label: 'Processing Time', value: `${result.processing_time_seconds || 0}s`, icon: <Clock className="w-5 h-5 text-amber-500" />, bg: 'bg-amber-50 dark:bg-amber-900/20' },
-          { label: 'Quiz Questions', value: result.questions?.length || 0, icon: <Trophy className="w-5 h-5 text-emerald-500" />, bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
+          { label: 'Source', value: result.language?.name || 'Unknown', icon: <Languages className="w-3.5 h-3.5" />, textClass: 'text-brand-700 dark:text-brand-400', borderClass: 'border-brand-100 dark:border-brand-900/50', bg: 'bg-brand-50/50 dark:bg-brand-900/20' },
+          { label: 'Target', value: result.target_language || 'ta', icon: <Globe className="w-3.5 h-3.5" />, textClass: 'text-blue-700 dark:text-blue-400', borderClass: 'border-blue-100 dark:border-blue-900/50', bg: 'bg-blue-50/50 dark:bg-blue-900/20' },
+          { label: 'Time', value: `${result.processing_time_seconds || 0}s`, icon: <Clock className="w-3.5 h-3.5" />, textClass: 'text-amber-700 dark:text-amber-400', borderClass: 'border-amber-100 dark:border-amber-900/50', bg: 'bg-amber-50/50 dark:bg-amber-900/20' },
+          { label: 'Quiz', value: `${result.questions?.length || 0} Qs`, icon: <Trophy className="w-3.5 h-3.5" />, textClass: 'text-emerald-700 dark:text-emerald-400', borderClass: 'border-emerald-100 dark:border-emerald-900/50', bg: 'bg-emerald-50/50 dark:bg-emerald-900/20' },
         ].map((stat, i) => (
-          <div key={i} className={`${stat.bg} p-4 rounded-2xl border border-white/50 dark:border-white/5 shadow-sm flex items-center space-x-4`}>
-            <div className="bg-white dark:bg-gray-800 p-2.5 rounded-xl shadow-sm">{stat.icon}</div>
-            <div>
-              <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{stat.label}</p>
-              <p className="text-sm font-extrabold text-gray-900 dark:text-white">{stat.value}</p>
-            </div>
+          <div key={i} className={`${stat.bg} ${stat.textClass} ${stat.borderClass} px-3.5 py-1.5 rounded-full border flex items-center space-x-2 text-xs font-semibold shadow-sm transition-all duration-300`}>
+            {stat.icon}
+            <span>
+              <span className="opacity-75">{stat.label}:</span> <span className="font-extrabold">{stat.value}</span>
+            </span>
           </div>
         ))}
       </div>

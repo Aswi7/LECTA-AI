@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 import whisper
+import torch
 from typing import List, Dict, Any
 
 # Configure logging
@@ -25,7 +26,7 @@ def get_supported_model_sizes() -> List[str]:
     return VALID_MODEL_SIZES
 
 def load_whisper_model(model_size: str = "base") -> Any:
-    """Loads and caches a Whisper model of the specified size.
+    """Loads and caches a Whisper model of the specified size on CUDA if available.
 
     Args:
         model_size (str): The size of the model to load (e.g., 'tiny', 'base').
@@ -47,9 +48,11 @@ def load_whisper_model(model_size: str = "base") -> Any:
 
     logger.info(f"Loading Whisper model '{model_size}'... This may take a moment.")
     try:
-        model = whisper.load_model(model_size)
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        logger.info(f"Using device: {device} for Whisper transcription.")
+        model = whisper.load_model(model_size, device=device)
         _model_cache[model_size] = model
-        logger.info(f"Whisper model '{model_size}' loaded successfully.")
+        logger.info(f"Whisper model '{model_size}' loaded successfully on {device}.")
         return model
     except Exception as e:
         logger.error(f"Failed to load Whisper model '{model_size}': {str(e)}")
@@ -78,7 +81,9 @@ def transcribe_audio(audio_path: str, model_size: str = "base") -> str:
         model = load_whisper_model(model_size)
         logger.info(f"Starting transcription for: {audio_path}")
         
-        result = model.transcribe(audio_path)
+        # Turn off fp16 if running on CPU to bypass PyTorch CPU warnings and emulation overhead
+        use_fp16 = torch.cuda.is_available()
+        result = model.transcribe(audio_path, fp16=use_fp16)
         
         detected_lang = result.get("language", "unknown")
         logger.info(f"Transcription complete. Detected language: {detected_lang}")
@@ -112,7 +117,9 @@ def transcribe_with_timestamps(audio_path: str, model_size: str = "base") -> Lis
         model = load_whisper_model(model_size)
         logger.info(f"Starting timestamped transcription for: {audio_path}")
         
-        result = model.transcribe(audio_path)
+        # Turn off fp16 if running on CPU
+        use_fp16 = torch.cuda.is_available()
+        result = model.transcribe(audio_path, fp16=use_fp16)
         
         segments = []
         for segment in result.get("segments", []):

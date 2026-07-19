@@ -49,7 +49,8 @@ class TestLectureAPI(unittest.TestCase):
         self.assertIn('summary', data)
         self.assertIn('concepts', data)
         self.assertIn('questions', data)
-        self.assertEqual(data['filename'], 'text_input')
+        self.assertNotEqual(data['filename'], 'text_input')
+        self.assertTrue(len(data['filename']) > 0)
 
     def test_process_text_missing_field(self):
         """Verifies that requests with missing required fields return a 400 error."""

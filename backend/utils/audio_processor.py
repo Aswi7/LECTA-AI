@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+import subprocess
 from pathlib import Path
 from pydub import AudioSegment
 from pydub.utils import mediainfo
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 SUPPORTED_FORMATS = {".mp3", ".mp4", ".wav", ".m4a", ".ogg", ".flac", ".webm"}
 
 def preprocess_audio(input_path: str) -> str:
-    """Detects format, converts to 16kHz mono WAV, and normalizes loudness.
+    """Detects format, converts to 16kHz mono WAV, and normalizes loudness using ffmpeg subprocess.
 
     Args:
         input_path (str): The absolute path to the input audio file.
@@ -39,42 +40,52 @@ def preprocess_audio(input_path: str) -> str:
         logger.error(f"Unsupported format {ext}. Supported: {supported_str}")
         raise ValueError(f"Unsupported format: {ext}. Supported: {supported_str}")
 
-    logger.info(f"Processing audio: {input_path}")
+    logger.info(f"Processing audio (using streaming ffmpeg): {input_path}")
+    output_path = str(path.with_name(f"{path.stem}_processed.wav"))
 
     try:
-        # Load audio file (pydub uses ffmpeg/avconv under the hood)
-        # For formats like .mp4 or .webm, AudioSegment.from_file handles them
-        audio = AudioSegment.from_file(input_path, format=ext[1:])
-
-        # 1. Convert to Mono
-        if audio.channels > 1:
-            logger.info("Converting to mono...")
-            audio = audio.set_channels(1)
-
-        # 2. Set Sample Rate to 16000 Hz (required by Whisper)
-        if audio.frame_rate != 16000:
-            logger.info("Setting sample rate to 16000 Hz...")
-            audio = audio.set_frame_rate(16000)
-
-        # 3. Normalize loudness to -20 dBFS
-        logger.info("Normalizing loudness to -20 dBFS...")
-        target_dBFS = -20.0
-        change_in_dBFS = target_dBFS - audio.dBFS
-        audio = audio.apply_gain(change_in_dBFS)
-
-        # 4. Save processed file
-        output_path = str(path.with_name(f"{path.stem}_processed.wav"))
-        logger.info(f"Saving processed file to: {output_path}")
-        audio.export(output_path, format="wav")
-
+        # Build optimized ffmpeg command: mono (-ac 1), 16000Hz (-ar 16000), loudness normalize (-filter:a "loudnorm=i=-20")
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i", str(path),
+            "-ac", "1",
+            "-ar", "16000",
+            "-filter:a", "loudnorm=i=-20",
+            output_path
+        ]
+        
+        logger.info(f"Running ffmpeg command: {' '.join(cmd)}")
+        # Run ffmpeg as a subprocess to process audio in a streaming fashion (low RAM footprint)
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        logger.info("ffmpeg processing completed successfully.")
         return output_path
 
+    except subprocess.CalledProcessError as e:
+        logger.warning(f"ffmpeg failed with exit code {e.returncode}. Stderr: {e.stderr}. Retrying without loudnorm filter...")
+        try:
+            # Fallback in case loudnorm is not supported or fails on short clips
+            fallback_cmd = [
+                "ffmpeg",
+                "-y",
+                "-i", str(path),
+                "-ac", "1",
+                "-ar", "16000",
+                output_path
+            ]
+            logger.info(f"Running fallback ffmpeg command: {' '.join(fallback_cmd)}")
+            subprocess.run(fallback_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+            logger.info("Fallback ffmpeg processing completed successfully.")
+            return output_path
+        except subprocess.CalledProcessError as err:
+            logger.error(f"Fallback ffmpeg processing failed: {err.stderr}")
+            raise RuntimeError(f"ffmpeg audio preprocessing failed: {err.stderr}") from err
     except Exception as e:
         logger.error(f"Error during audio preprocessing: {str(e)}")
         raise
 
 def get_audio_duration(path: str) -> float:
-    """Returns the duration of an audio file in seconds.
+    """Returns the duration of an audio file in seconds without loading it into memory.
 
     Args:
         path (str): The path to the audio file.
@@ -91,6 +102,13 @@ def get_audio_duration(path: str) -> float:
         raise FileNotFoundError(f"File not found: {path}")
 
     try:
+        # Use mediainfo (which queries metadata) instead of loading the entire file in RAM
+        info = mediainfo(path)
+        if 'duration' in info:
+            return float(info['duration'])
+        
+        # Fallback to AudioSegment only if metadata is missing
+        logger.warning(f"Duration not found in metadata for {path}. Falling back to AudioSegment load.")
         audio = AudioSegment.from_file(path)
         duration_seconds = len(audio) / 1000.0
         return float(duration_seconds)

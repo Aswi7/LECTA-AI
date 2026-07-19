@@ -119,7 +119,7 @@ def translate_text(text: str, target_lang: str, source_lang: str = "auto") -> st
 
 def translate_keywords(keywords: List[Dict[str, Any]], target_lang: str) -> List[Dict[str, Any]]:
     """
-    Translates a list of keywords and adds the "translated" key to each dict.
+    Translates a list of keywords in a single batch request, with individual fallback.
     
     Args:
         keywords: A list of dictionaries containing at least a "keyword" key.
@@ -128,9 +128,47 @@ def translate_keywords(keywords: List[Dict[str, Any]], target_lang: str) -> List
     Returns:
         A new list of dictionaries with the "translated" key.
     """
+    if not keywords:
+        return []
+
     translated_keywords = []
     translator = GoogleTranslator(source='auto', target=target_lang)
+    
+    # Extract keyword strings
+    kw_strings = [kw_dict.get("keyword", "").strip() for kw_dict in keywords if kw_dict.get("keyword")]
+    
+    if not kw_strings:
+        return [kw.copy() for kw in keywords]
 
+    # Combine keywords with a unique separator
+    separator = " ||| "
+    combined_text = separator.join(kw_strings)
+    
+    logger.info(f"Batch translating {len(kw_strings)} keywords...")
+    try:
+        translated_combined = translator.translate(combined_text)
+        # Split back using separator
+        translated_parts = [part.strip() for part in translated_combined.split("|||")]
+        
+        # Verify that length matches
+        if len(translated_parts) == len(kw_strings):
+            # Create a lookup mapping from original keyword to translated keyword
+            kw_map = dict(zip(kw_strings, translated_parts))
+            
+            for kw_dict in keywords:
+                new_dict = kw_dict.copy()
+                orig_kw = kw_dict.get("keyword", "").strip()
+                new_dict["translated"] = kw_map.get(orig_kw, orig_kw)
+                translated_keywords.append(new_dict)
+                
+            logger.info("Batch keyword translation completed successfully.")
+            return translated_keywords
+        else:
+            logger.warning(f"Batch translation returned mismatched count: {len(translated_parts)} instead of {len(kw_strings)}. Falling back to individual translation...")
+    except Exception as e:
+        logger.warning(f"Batch keyword translation failed: {e}. Falling back to individual translation...")
+        
+    # Fallback to individual translation
     for kw_dict in keywords:
         new_dict = kw_dict.copy()
         keyword = kw_dict.get("keyword", "")
@@ -141,13 +179,11 @@ def translate_keywords(keywords: List[Dict[str, Any]], target_lang: str) -> List
             continue
 
         try:
-            # We don't necessarily need retry logic for every single keyword to keep it fast,
-            # but we follow the "graceful failure" rule.
             translated = translator.translate(keyword)
             new_dict["translated"] = translated
         except Exception as e:
             logger.warning(f"Failed to translate keyword '{keyword}': {e}")
-            new_dict["translated"] = keyword # Fallback to original
+            new_dict["translated"] = keyword
             
         translated_keywords.append(new_dict)
 
