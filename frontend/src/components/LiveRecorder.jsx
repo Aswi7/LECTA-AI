@@ -57,6 +57,19 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
     };
   }, [audioURL]);
 
+  // Handle waveform drawing loop on state changes/canvas mount
+  useEffect(() => {
+    if ((recorderState === 'recording' || recorderState === 'paused') && canvasRef.current && analyserRef.current) {
+      drawWaveform();
+    }
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [recorderState]);
+
   const startTimer = () => {
     timerRef.current = setInterval(() => {
       setDuration(prev => prev + 1);
@@ -114,8 +127,6 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
       source.connect(analyser);
       analyserRef.current = analyser;
 
-      drawWaveform();
-
       mediaRecorder.start(1000);
       startTimer();
       setRecorderState('recording');
@@ -149,6 +160,9 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
       currentAnalyser.getByteFrequencyData(dataArray);
 
       currentCtx.clearRect(0, 0, currentCanvas.width, currentCanvas.height);
+
+      // Disable shadow for grid lines
+      currentCtx.shadowBlur = 0;
 
       // Draw background grid lines
       currentCtx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
@@ -184,21 +198,24 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
       // 1. Draw beautiful animated flowing sine waves (always visible, scales with sound)
       const time = Date.now() * 0.003;
       const waves = [
-        { freq: 0.008, amp: 20, speed: 1.0, color: 'rgba(99, 102, 241, 0.4)' },
-        { freq: 0.015, amp: 12, speed: -1.2, color: 'rgba(168, 85, 247, 0.3)' },
-        { freq: 0.005, amp: 8,  speed: 0.8, color: 'rgba(236, 72, 153, 0.2)' }
+        { freq: 0.006, amp: 22, speed: 0.8, color: 'rgba(99, 102, 241, 0.75)', glowColor: 'rgba(99, 102, 241, 0.5)' }, // Indigo
+        { freq: 0.012, amp: 14, speed: -1.0, color: 'rgba(168, 85, 247, 0.6)', glowColor: 'rgba(168, 85, 247, 0.4)' }, // Purple
+        { freq: 0.004, amp: 8,  speed: 0.6, color: 'rgba(236, 72, 153, 0.45)', glowColor: 'rgba(236, 72, 153, 0.3)' }, // Pink
+        { freq: 0.018, amp: 5,  speed: -1.5, color: 'rgba(45, 212, 191, 0.5)', glowColor: 'rgba(45, 212, 191, 0.35)' }  // Teal
       ];
 
       waves.forEach(w => {
         currentCtx.beginPath();
-        currentCtx.lineWidth = 2;
+        currentCtx.lineWidth = 2.5;
         currentCtx.strokeStyle = w.color;
+        currentCtx.shadowColor = w.glowColor || w.color;
+        currentCtx.shadowBlur = 10;
         
         for (let x = 0; x < currentCanvas.width; x++) {
           // Boost amplitude dynamically based on voice activity
-          const dynamicAmp = w.amp * (1 + activity * 2);
+          const dynamicAmp = w.amp * (1 + activity * 3.5);
           const y = (currentCanvas.height / 2) + 
-                    Math.sin(x * w.freq + time * w.speed) * dynamicAmp * Math.sin(time * 0.2);
+                    Math.sin(x * w.freq + time * w.speed) * dynamicAmp;
           if (x === 0) {
             currentCtx.moveTo(x, y);
           } else {
@@ -210,6 +227,9 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
 
       // 2. Draw active audio frequency bars in front (if volume is above baseline threshold)
       if (average > 1.5) {
+        // Reset shadow for bars so they look sharp
+        currentCtx.shadowBlur = 0;
+
         const barWidth = (currentCanvas.width / bufferLength) * 2;
         let x = 0;
 
