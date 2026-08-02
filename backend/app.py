@@ -11,7 +11,7 @@ try:
     import audioop
 except ImportError:
     try:
-        import audioop_lts as audioop
+        import audioop_lts as audioop  # type: ignore
         sys.modules['audioop'] = audioop
     except ImportError:
         pass
@@ -40,6 +40,11 @@ from utils.db_handler import (
 )
 import yt_dlp
 from utils.export_handler import generate_export, delete_exports
+from modules.rag_chat import (
+    index_session, 
+    answer_question, 
+    delete_session_index
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -74,7 +79,7 @@ def download_audio_from_url(url, session_id):
     
     logger.info("Attempting to download audio using browser cookies extraction...")
     try:
-        with yt_dlp.YoutubeDL(ydl_opts_cookies) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts_cookies) as ydl:  # type: ignore
             info = ydl.extract_info(url, download=True)
             filename = f"{session_id}_downloaded.mp3"
             return os.path.join(CONFIG.UPLOAD_FOLDER, filename), info.get('title', 'Downloaded Video')
@@ -94,7 +99,7 @@ def download_audio_from_url(url, session_id):
             'nocheckcertificate': True,
         }
         
-        with yt_dlp.YoutubeDL(ydl_opts_no_cookies) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts_no_cookies) as ydl:  # type: ignore
             info = ydl.extract_info(url, download=True)
             filename = f"{session_id}_downloaded.mp3"
             return os.path.join(CONFIG.UPLOAD_FOLDER, filename), info.get('title', 'Downloaded Video')
@@ -174,7 +179,7 @@ def process_audio():
     if not allowed_file(file.filename):
         return jsonify({"error": "Unsupported file format", "session_id": session_id}), 400
 
-    filename = secure_filename(file.filename)
+    filename = secure_filename(file.filename or "")
     upload_path = os.path.join(CONFIG.UPLOAD_FOLDER, f"{session_id}_{filename}")
     file.save(upload_path)
     
@@ -239,6 +244,21 @@ def process_audio():
         
         # Save to DB
         save_result(session_id, full_response)
+        
+        try:
+            index_session(
+                session_id=session_id,
+                transcript=transcript,
+                metadata={
+                  "filename": topic_name, 
+                  "language": lang_data.get("code", "en")
+                }
+            )
+            pipeline_steps.append("rag_indexed")
+            logger.info(f"RAG index built for {session_id}")
+        except Exception as e:
+            logger.warning(
+              f"RAG indexing failed for {session_id}: {e}")
         
         return jsonify(full_response), 200
 
@@ -332,6 +352,21 @@ def process_url():
         # Save to DB
         save_result(session_id, full_response)
         
+        try:
+            index_session(
+                session_id=session_id,
+                transcript=transcript,
+                metadata={
+                  "filename": topic_name, 
+                  "language": lang_data.get("code", "en")
+                }
+            )
+            pipeline_steps.append("rag_indexed")
+            logger.info(f"RAG index built for {session_id}")
+        except Exception as e:
+            logger.warning(
+              f"RAG indexing failed for {session_id}: {e}")
+        
         return jsonify(full_response), 200
 
     except Exception as e:
@@ -408,7 +443,23 @@ def process_text_api():
             **ai_results
         }
         
+        # Save to DB
         save_result(session_id, full_response)
+        
+        try:
+            index_session(
+                session_id=session_id,
+                transcript=text,
+                metadata={
+                  "filename": topic_name, 
+                  "language": lang_data.get("code", "en")
+                }
+            )
+            pipeline_steps.append("rag_indexed")
+            logger.info(f"RAG index built for {session_id}")
+        except Exception as e:
+            logger.warning(
+              f"RAG indexing failed for {session_id}: {e}")
         
         return jsonify(full_response), 200
 
@@ -436,6 +487,7 @@ def delete_result_api(session_id):
     try:
         delete_result(session_id)
         delete_exports(session_id)
+        delete_session_index(session_id)
         return jsonify({"message": "Session deleted successfully", "session_id": session_id}), 200
     except Exception as e:
         return jsonify({"error": str(e), "session_id": session_id}), 500
@@ -501,6 +553,60 @@ def health_check():
         "db_connected": ping_db(),
         "timestamp": datetime.now(UTC).isoformat()
     }), 200
+
+
+@app.route('/api/chat/<session_id>', methods=['POST'])
+def chat_with_lecture(session_id):
+    data = request.get_json()
+    if not data or 'question' not in data:
+        return jsonify({
+          "error": "No question provided"}), 400
+    
+    question = data.get('question', '').strip()
+    if not question:
+        return jsonify({
+          "error": "Question cannot be empty"}), 400
+    if len(question) > 500:
+        return jsonify({
+          "error": "Question too long (max 500 chars)"
+        }), 400
+    
+    session_data = get_result(session_id)
+    if not session_data:
+        return jsonify({
+          "error": "Session not found", 
+          "session_id": session_id}), 404
+    
+    history = data.get('history', [])
+    
+    try:
+        result = answer_question(
+          session_id, question, history)
+        result['session_id'] = session_id
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Chat error for {session_id}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/chat/<session_id>/status', methods=['GET'])
+def chat_status(session_id):
+    try:
+        from modules.rag_chat import get_chroma_client, CHROMA_PATH
+        client = get_chroma_client()
+        collection = client.get_collection(f"session_{session_id}")
+        count = collection.count()
+        return jsonify({
+            "indexed": True,
+            "chunk_count": count,
+            "session_id": session_id
+        }), 200
+    except Exception:
+        return jsonify({
+            "indexed": False,
+            "chunk_count": 0,
+            "session_id": session_id
+        }), 200
 
 
 if __name__ == '__main__':
