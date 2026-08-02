@@ -1,6 +1,107 @@
+import logging
+import re
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from transformers import pipeline as hf_pipeline  # type: ignore
+import torch
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+_bart_summarizer = None
+
+
+def load_bart_model():
+    """
+    Loads and caches the BART summarization pipeline.
+    """
+    global _bart_summarizer
+    if _bart_summarizer is not None:
+        return _bart_summarizer
+    
+    try:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        _bart_summarizer = hf_pipeline(
+            "summarization",
+            model="facebook/bart-large-cnn",
+            device=0 if device == "cuda" else -1
+        )
+        logger.info(f"BART model loaded on {device}")
+        return _bart_summarizer
+    except Exception as e:
+        logger.error(f"Error loading BART model: {e}")
+        return None
+
+
+def chunk_for_bart(text: str, max_words: int = 900) -> list[str]:
+    """
+    Splits text into chunks under max_words words, always splitting on sentence boundaries.
+    """
+    if not text:
+        return []
+    
+    # Split text on sentence boundaries (". ", "! ", "? ") without discarding punctuation
+    sentences = re.split(r'(?<=\. |\! |\? )', text)
+    sentences = [s for s in sentences if s]
+    
+    chunks = []
+    current_chunk = []
+    current_word_count = 0
+    
+    for sentence in sentences:
+        sentence_words = len(sentence.split())
+        if not sentence_words:
+            continue
+        
+        if current_chunk and current_word_count + sentence_words > max_words:
+            chunks.append("".join(current_chunk))
+            current_chunk = [sentence]
+            current_word_count = sentence_words
+        else:
+            current_chunk.append(sentence)
+            current_word_count += sentence_words
+            
+    if current_chunk:
+        chunks.append("".join(current_chunk))
+        
+    return chunks
+
+
+def summarize_with_bart(text: str, max_length: int = 150, min_length: int = 50) -> str:
+    """
+    Summarizes the text using BART. Fallback to TF-IDF summarization on failure.
+    """
+    model = load_bart_model()
+    if model is None:
+        logger.info("Fallback summarizer was used.")
+        return summarize_text(text, text.split(". "), use_bart=False)
+        
+    try:
+        word_count = len(text.split())
+        if word_count > 900:
+            chunks = chunk_for_bart(text)
+            chunk_summaries = []
+            for chunk in chunks:
+                res = model(chunk, max_length=max_length, min_length=min_length, do_sample=False)
+                if res and isinstance(res, list) and len(res) > 0:
+                    chunk_summaries.append(res[0]["summary_text"])
+            
+            joined_text = " ".join(chunk_summaries)
+            res = model(joined_text, max_length=max_length, min_length=min_length, do_sample=False)
+            final_summary = res[0]["summary_text"]
+        else:
+            res = model(text, max_length=max_length, min_length=min_length, do_sample=False)
+            final_summary = res[0]["summary_text"]
+            
+        logger.info("BART summarizer was used.")
+        return final_summary
+    except Exception as e:
+        logger.error(f"Error during BART summarization: {e}")
+        logger.info("Fallback summarizer was used.")
+        return summarize_text(text, text.split(". "), use_bart=False)
+
 
 def score_sentences(sentences: list[str]) -> dict[str, float]:
     """
@@ -24,7 +125,7 @@ def score_sentences(sentences: list[str]) -> dict[str, float]:
         
         # Calculate scores as the sum of TF-IDF values for each sentence
         # matrix.sum(axis=1) returns a matrix of shape (n_sentences, 1)
-        scores = np.asarray(tfidf_matrix.sum(axis=1)).flatten()
+        scores = np.asarray(tfidf_matrix.sum(axis=1)).flatten()  # type: ignore
         
         return {sentences[i]: float(scores[i]) for i in range(len(sentences))}
     except ValueError:
@@ -75,7 +176,7 @@ def deduplicate_sentences(scored: dict[str, float], threshold: float = 0.85) -> 
 
     return [sentences[i] for i in keep_indices]
 
-def summarize_text(cleaned_text: str, sentences: list[str], ratio: float = 0.3) -> str:
+def summarize_text(cleaned_text: str, sentences: list[str], ratio: float = 0.3, use_bart: bool = True) -> str:
     """
     Creates an extractive summary of the text.
     
@@ -83,10 +184,14 @@ def summarize_text(cleaned_text: str, sentences: list[str], ratio: float = 0.3) 
         cleaned_text: The full text (not used for scoring, but provided for context).
         sentences: List of sentences extracted from the text.
         ratio: Fraction of sentences to include in the summary.
+        use_bart: Whether to use BART model for abstractive summarization.
         
     Returns:
         A single paragraph string representing the summary.
     """
+    if use_bart and len(cleaned_text.split()) > 50:
+        return summarize_with_bart(cleaned_text)
+
     if not sentences:
         return ""
     
@@ -164,3 +269,23 @@ if __name__ == "__main__":
     bullets = generate_bullet_notes(test_sentences, top_n=4)
     for b in bullets:
         print(b)
+        
+    print("\n--- BART Summary ---")
+    long_text = (
+        "Photosynthesis is a process used by plants and other organisms to convert light energy into chemical energy. "
+        "Through cellular respiration, plants use this chemical energy to fuel their activities. "
+        "The process of photosynthesis is essential for life on Earth. "
+        "Chlorophyll is the pigment that absorbs light for photosynthesis. "
+        "Plants are the primary producers in most ecosystems. "
+        "Oxygen is released as a byproduct of photosynthesis. "
+        "Carbon dioxide and water are the raw materials needed for the process. "
+        "This long text is designed to be over fifty words so that we can trigger the BART model for abstractive summarization. "
+        "Let us add some more sentences. The BART model is a sequence-to-sequence model trained on denoising text. "
+        "It excels at abstractive summarization because it can rewrite and compress information. "
+        "By using Facebook's bart-large-cnn model, we get high quality summaries that capture the core meaning of our lecture content. "
+        "This is a demonstration of that capability."
+    )
+    print(f"Word count of test text: {len(long_text.split())}")
+    bart_summary = summarize_text(long_text, test_sentences, use_bart=True)
+    print("BART Summary Output:")
+    print(bart_summary)

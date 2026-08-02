@@ -16,3 +16,8 @@ reportlab==4.1.0  # PDF generation for lecture summaries and notes
 python-docx
 ==1.1.0  # Microsoft Word (.docx) export functionality
 yt-dlp==2026.3.17  # Downloading audio from YouTube and other video sites
+
+# Week 1 Upgrades
+transformers
+accelerate
+sentencepiece
