@@ -103,6 +103,38 @@ def summarize_with_bart(text: str, max_length: int = 150, min_length: int = 50) 
         return summarize_text(text, text.split(". "), use_bart=False)
 
 
+def get_summary_confidence(sentences: list[str], summary: str) -> float:
+    """Calculates summary confidence score based on scoring of summary sentences.
+
+    Args:
+        sentences: A list of sentence strings.
+        summary: The generated summary string.
+
+    Returns:
+        float: Calculated summary confidence score.
+    """
+    if not sentences:
+        return 0.5
+
+    scored = score_sentences(sentences)
+    if not scored:
+        return 0.5
+
+    # Get the scores of sentences that appear in the summary
+    summary_scores = [score for sent, score in scored.items() if sent in summary]
+    
+    if not summary_scores:
+        summary_scores = [0.0]
+        
+    all_scores = list(scored.values())
+    
+    mean_summary_scores = sum(summary_scores) / len(summary_scores)
+    mean_all_scores = sum(all_scores) / len(all_scores)
+    
+    signal_ratio = mean_summary_scores / (mean_all_scores + 0.001)
+    return min(1.0, round(signal_ratio / 2, 3))
+
+
 def score_sentences(sentences: list[str]) -> dict[str, float]:
     """
     Scores each sentence based on the sum of its TF-IDF term weights.

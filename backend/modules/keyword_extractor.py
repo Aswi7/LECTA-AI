@@ -96,8 +96,14 @@ def extract_keywords(text: str, top_n: int = 15) -> List[Dict[str, Any]]:
             
         # Sort by score descending
         results.sort(key=lambda x: x["score"], reverse=True)
+        top_keywords = results[:top_n]
         
-        return results[:top_n]
+        if top_keywords:
+            max_score = max(kw["score"] for kw in top_keywords)
+            for kw in top_keywords:
+                kw["confidence"] = round(kw["score"] / max_score, 3) if max_score > 0 else 0.0
+                
+        return top_keywords
     except Exception as e:
         logger.error(f"Error in extract_keywords: {e}")
         return []

@@ -185,7 +185,7 @@ def process_audio():
         pipeline_steps.append("preprocess_audio")
         
         # Step 2: Transcribe Audio
-        transcript = transcribe_audio(processed_path)
+        transcript, transcription_confidence = transcribe_audio(processed_path)
         pipeline_steps.append("transcribe_audio")
         
         # Step 3: Detect Language
@@ -200,6 +200,26 @@ def process_audio():
         ai_results = run_ai_modules(cleaned_text, sentences, target_language)
         pipeline_steps.extend(["summarization", "keyword_extraction", "question_generation", "translation"])
         
+        # Confidence scoring report
+        from modules.summarizer import get_summary_confidence
+
+        confidence_report = {
+            "transcription": transcription_confidence.get("confidence", 0.5),
+            "summarization": get_summary_confidence(sentences, ai_results.get("summary", "")),
+            "keywords": round(
+                sum(k.get("confidence", 0) for k in ai_results.get("concepts", {}).get("keywords", []))
+                / max(len(ai_results.get("concepts", {}).get("keywords", [])), 1), 3
+            ),
+            "overall": 0.0
+        }
+        confidence_report["overall"] = round(
+            sum([
+                confidence_report["transcription"],
+                confidence_report["summarization"],
+                confidence_report["keywords"]
+            ]) / 3, 3
+        )
+        
         # Determine topic name
         topic_name = generate_topic_name(ai_results.get("concepts", {}), filename)
         
@@ -213,6 +233,7 @@ def process_audio():
             "language": lang_data,
             "pipeline_steps": pipeline_steps,
             "processing_time_seconds": round(time.time() - start_time, 2),
+            "confidence_report": confidence_report,
             **ai_results
         }
         
@@ -256,7 +277,7 @@ def process_url():
         pipeline_steps.append("preprocess_audio")
         
         # Step 2: Transcribe Audio
-        transcript = transcribe_audio(processed_path)
+        transcript, transcription_confidence = transcribe_audio(processed_path)
         pipeline_steps.append("transcribe_audio")
         
         # Step 3: Detect Language
@@ -271,6 +292,26 @@ def process_url():
         ai_results = run_ai_modules(cleaned_text, sentences, target_language)
         pipeline_steps.extend(["summarization", "keyword_extraction", "question_generation", "translation"])
         
+        # Confidence scoring report
+        from modules.summarizer import get_summary_confidence
+
+        confidence_report = {
+            "transcription": transcription_confidence.get("confidence", 0.5),
+            "summarization": get_summary_confidence(sentences, ai_results.get("summary", "")),
+            "keywords": round(
+                sum(k.get("confidence", 0) for k in ai_results.get("concepts", {}).get("keywords", []))
+                / max(len(ai_results.get("concepts", {}).get("keywords", [])), 1), 3
+            ),
+            "overall": 0.0
+        }
+        confidence_report["overall"] = round(
+            sum([
+                confidence_report["transcription"],
+                confidence_report["summarization"],
+                confidence_report["keywords"]
+            ]) / 3, 3
+        )
+        
         # Determine topic name
         topic_name = generate_topic_name(ai_results.get("concepts", {}), filename)
         
@@ -284,6 +325,7 @@ def process_url():
             "language": lang_data,
             "pipeline_steps": pipeline_steps,
             "processing_time_seconds": round(time.time() - start_time, 2),
+            "confidence_report": confidence_report,
             **ai_results
         }
         
@@ -328,6 +370,28 @@ def process_text_api():
         ai_results = run_ai_modules(cleaned_text, sentences, target_language)
         pipeline_steps.extend(["summarization", "keyword_extraction", "question_generation", "translation"])
         
+        # Confidence scoring report
+        from modules.summarizer import get_summary_confidence
+        
+        transcription_confidence = {"confidence": 1.0}
+
+        confidence_report = {
+            "transcription": transcription_confidence.get("confidence", 0.5),
+            "summarization": get_summary_confidence(sentences, ai_results.get("summary", "")),
+            "keywords": round(
+                sum(k.get("confidence", 0) for k in ai_results.get("concepts", {}).get("keywords", []))
+                / max(len(ai_results.get("concepts", {}).get("keywords", [])), 1), 3
+            ),
+            "overall": 0.0
+        }
+        confidence_report["overall"] = round(
+            sum([
+                confidence_report["transcription"],
+                confidence_report["summarization"],
+                confidence_report["keywords"]
+            ]) / 3, 3
+        )
+        
         # Determine topic name
         topic_name = generate_topic_name(ai_results.get("concepts", {}), "text_input")
         
@@ -340,6 +404,7 @@ def process_text_api():
             "language": lang_data,
             "pipeline_steps": pipeline_steps,
             "processing_time_seconds": round(time.time() - start_time, 2),
+            "confidence_report": confidence_report,
             **ai_results
         }
         

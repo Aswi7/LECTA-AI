@@ -58,7 +58,64 @@ def load_whisper_model(model_size: str = "base") -> Any:
         logger.error(f"Failed to load Whisper model '{model_size}': {str(e)}")
         raise
 
-def transcribe_audio(audio_path: str, model_size: str = "base") -> str:
+
+def get_transcription_confidence(audio_path: str, model_size: str = "base") -> dict:
+    """Runs Whisper transcription and computes confidence score based on no_speech_prob.
+
+    Args:
+        audio_path (str): The path to the processed audio file.
+        model_size (str): The size of the Whisper model to use.
+
+    Returns:
+        dict: A dict containing transcription confidence and unreliable segments.
+    """
+    if not os.path.exists(audio_path):
+        error_msg = f"Audio file not found for transcription: {audio_path}"
+        logger.error(error_msg)
+        raise FileNotFoundError(error_msg)
+
+    try:
+        model = load_whisper_model(model_size)
+        use_fp16 = torch.cuda.is_available()
+        result = model.transcribe(audio_path, fp16=use_fp16)
+        
+        segments = result.get("segments", [])
+        total_segments = len(segments)
+        
+        if total_segments == 0:
+            return {
+                "confidence": 1.0,
+                "unreliable_segment_count": 0,
+                "total_segments": 0,
+                "unreliable_segments": []
+            }
+            
+        no_speech_probs = [float(seg.get("no_speech_prob", 0.0)) for seg in segments]
+        avg_no_speech_prob = sum(no_speech_probs) / total_segments
+        confidence = round(1 - avg_no_speech_prob, 3)
+        
+        unreliable_segments = []
+        for seg in segments:
+            prob = float(seg.get("no_speech_prob", 0.0))
+            if prob > 0.6:
+                unreliable_segments.append({
+                    "start": float(seg["start"]),
+                    "end": float(seg["end"]),
+                    "text": seg["text"].strip()
+                })
+                
+        return {
+            "confidence": float(confidence),
+            "unreliable_segment_count": len(unreliable_segments),
+            "total_segments": total_segments,
+            "unreliable_segments": unreliable_segments
+        }
+    except Exception as e:
+        logger.error(f"Error during transcription confidence scoring of {audio_path}: {str(e)}")
+        raise
+
+
+def transcribe_audio(audio_path: str, model_size: str = "base") -> tuple[str, dict]:
     """Transcribes an audio file into a plain text string.
 
     Args:
@@ -66,7 +123,7 @@ def transcribe_audio(audio_path: str, model_size: str = "base") -> str:
         model_size (str): The size of the Whisper model to use.
 
     Returns:
-        str: The full transcribed text.
+        tuple[str, dict]: A tuple of (transcribed_text, confidence_dict).
 
     Raises:
         FileNotFoundError: If the audio file does not exist.
@@ -88,7 +145,39 @@ def transcribe_audio(audio_path: str, model_size: str = "base") -> str:
         detected_lang = result.get("language", "unknown")
         logger.info(f"Transcription complete. Detected language: {detected_lang}")
         
-        return result["text"].strip()
+        segments = result.get("segments", [])
+        total_segments = len(segments)
+        
+        if total_segments == 0:
+            confidence_dict = {
+                "confidence": 1.0,
+                "unreliable_segment_count": 0,
+                "total_segments": 0,
+                "unreliable_segments": []
+            }
+        else:
+            no_speech_probs = [float(seg.get("no_speech_prob", 0.0)) for seg in segments]
+            avg_no_speech_prob = sum(no_speech_probs) / total_segments
+            confidence = round(1 - avg_no_speech_prob, 3)
+            
+            unreliable_segments = []
+            for seg in segments:
+                prob = float(seg.get("no_speech_prob", 0.0))
+                if prob > 0.6:
+                    unreliable_segments.append({
+                        "start": float(seg["start"]),
+                        "end": float(seg["end"]),
+                        "text": seg["text"].strip()
+                    })
+                    
+            confidence_dict = {
+                "confidence": float(confidence),
+                "unreliable_segment_count": len(unreliable_segments),
+                "total_segments": total_segments,
+                "unreliable_segments": unreliable_segments
+            }
+            
+        return result["text"].strip(), confidence_dict
 
     except Exception as e:
         logger.error(f"Error during transcription of {audio_path}: {str(e)}")
