@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ChatPanel from './ChatPanel';
 import { 
   FileText, 
   Languages, 
@@ -39,6 +40,7 @@ const ResultsDashboard = ({ result }) => {
     { id: 'translation', label: 'Translation', icon: <Languages className="w-4 h-4" /> },
     { id: 'keywords', label: 'Concepts', icon: <Key className="w-4 h-4" /> },
     { id: 'questions', label: 'Quiz', icon: <HelpCircle className="w-4 h-4" /> },
+    { id: 'chat', label: 'Chat', icon: <span className="text-base">💬</span> },
   ];
 
   return (
@@ -264,6 +266,14 @@ const ResultsDashboard = ({ result }) => {
                     })}
                   </div>
                 </div>
+              )}
+
+              {/* Chat Tab */}
+              {activeTab === 'chat' && (
+                <ChatPanel 
+                  sessionId={result.session_id}
+                  isIndexed={result.pipeline_steps?.includes("rag_indexed")} 
+                />
               )}
             </motion.div>
           </AnimatePresence>
