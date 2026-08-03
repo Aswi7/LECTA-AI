@@ -3,7 +3,7 @@ import logging
 from typing import Any
 from sentence_transformers import SentenceTransformer  # type: ignore
 import chromadb  # type: ignore
-import anthropic  # type: ignore
+import google.generativeai as genai  # type: ignore
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -118,16 +118,39 @@ def index_session(session_id: str, transcript: str, metadata: dict) -> bool:
     Returns:
         bool: True on success, False on exception.
     """
-    logger.info(f"Starting RAG indexing for session {session_id}, transcript length: {len(transcript)} characters")
+    logger.info(f"Starting RAG indexing for session {session_id}, transcript length: {len(transcript) if transcript else 0} characters")
+    if not transcript or len(transcript.strip()) < 50:
+        logger.warning(f"Transcript too short to index for session {session_id}: {len(transcript) if transcript else 0} characters")
+        return False
+
     try:
         chunks = chunk_transcript(transcript)
         if not chunks:
+            logger.error(f"No chunks generated for session {session_id}. Transcript may be too short.")
+            return False
+            
+        if len(chunks) == 0:
+            logger.error("Empty chunks list — cannot add to ChromaDB")
             return False
 
-        client = get_chroma_client()
-        # Gets or creates ChromaDB collection named f"session_{session_id}"
-        collection = client.get_or_create_collection(
-            name=f"session_{session_id}",
+        collection_name = f"session_{session_id}"
+        
+        # Validate collection name
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]{3,63}$', collection_name):
+            logger.error(f"Invalid collection name: {collection_name}")
+            return False
+        
+        # Delete existing collection if it exists (to avoid conflicts on reprocessing)
+        try:
+            client = get_chroma_client()
+            client.delete_collection(collection_name)
+            logger.info(f"Deleted existing collection: {collection_name}")
+        except Exception:
+            pass  # Collection didn't exist, that's fine
+        
+        collection = client.create_collection(
+            name=collection_name,
             metadata={"hnsw:space": "cosine"}
         )
 
@@ -201,7 +224,7 @@ def retrieve_relevant_chunks(session_id: str, question: str, top_k: int = 3) -> 
 
 
 def answer_question(session_id: str, question: str, chat_history: list[dict]) -> dict:
-    """Answers a question based on retrieved session index and chat history using Anthropic API.
+    """Answers a question based on retrieved session index and chat history using Google Gemini API.
 
     Args:
         session_id (str): The session ID.
@@ -250,13 +273,14 @@ def answer_question(session_id: str, question: str, chat_history: list[dict]) ->
             "Answer clearly for exam preparation."
         )
 
-        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        message = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        answer = getattr(message.content[0], "text", "")
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY or GOOGLE_API_KEY is not set in environment variables.")
+
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(prompt)
+        answer = response.text
 
         return {
             "answer": answer,
@@ -265,7 +289,7 @@ def answer_question(session_id: str, question: str, chat_history: list[dict]) ->
             "used_rag": True
         }
     except Exception as e:
-        logger.error(f"Anthropic API error answering question for session {session_id}: {e}")
+        logger.error(f"Google Gemini API error answering question for session {session_id}: {e}")
         return {
             "answer": "An error occurred while calling the AI assistant. Please try again later.",
             "sources": sources,

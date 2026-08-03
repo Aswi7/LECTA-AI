@@ -24,4 +24,4 @@ sentencepiece
 
 sentence-transformers
 chromadb
-anthropic
+google-generativeai
