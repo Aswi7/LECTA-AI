@@ -246,7 +246,7 @@ def process_audio():
         save_result(session_id, full_response)
         
         try:
-            index_session(
+            indexed = index_session(
                 session_id=session_id,
                 transcript=transcript,
                 metadata={
@@ -254,8 +254,11 @@ def process_audio():
                   "language": lang_data.get("code", "en")
                 }
             )
-            pipeline_steps.append("rag_indexed")
-            logger.info(f"RAG index built for {session_id}")
+            if indexed:
+                pipeline_steps.append("rag_indexed")
+                logger.info(f"RAG index built for {session_id}")
+            else:
+                logger.warning(f"RAG indexing returned False for {session_id}")
         except Exception as e:
             logger.warning(
               f"RAG indexing failed for {session_id}: {e}")
@@ -353,7 +356,7 @@ def process_url():
         save_result(session_id, full_response)
         
         try:
-            index_session(
+            indexed = index_session(
                 session_id=session_id,
                 transcript=transcript,
                 metadata={
@@ -361,8 +364,11 @@ def process_url():
                   "language": lang_data.get("code", "en")
                 }
             )
-            pipeline_steps.append("rag_indexed")
-            logger.info(f"RAG index built for {session_id}")
+            if indexed:
+                pipeline_steps.append("rag_indexed")
+                logger.info(f"RAG index built for {session_id}")
+            else:
+                logger.warning(f"RAG indexing returned False for {session_id}")
         except Exception as e:
             logger.warning(
               f"RAG indexing failed for {session_id}: {e}")
@@ -447,7 +453,7 @@ def process_text_api():
         save_result(session_id, full_response)
         
         try:
-            index_session(
+            indexed = index_session(
                 session_id=session_id,
                 transcript=text,
                 metadata={
@@ -455,8 +461,11 @@ def process_text_api():
                   "language": lang_data.get("code", "en")
                 }
             )
-            pipeline_steps.append("rag_indexed")
-            logger.info(f"RAG index built for {session_id}")
+            if indexed:
+                pipeline_steps.append("rag_indexed")
+                logger.info(f"RAG index built for {session_id}")
+            else:
+                logger.warning(f"RAG indexing returned False for {session_id}")
         except Exception as e:
             logger.warning(
               f"RAG indexing failed for {session_id}: {e}")

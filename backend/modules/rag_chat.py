@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # Module-level variables
 _embedding_model = None
 _chroma_client = None
-CHROMA_PATH = "chroma_db"
+CHROMA_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "chroma_db"))
 SIMILARITY_THRESHOLD = 0.3
 
 
@@ -118,6 +118,7 @@ def index_session(session_id: str, transcript: str, metadata: dict) -> bool:
     Returns:
         bool: True on success, False on exception.
     """
+    logger.info(f"Starting RAG indexing for session {session_id}, transcript length: {len(transcript)} characters")
     try:
         chunks = chunk_transcript(transcript)
         if not chunks:
@@ -125,13 +126,17 @@ def index_session(session_id: str, transcript: str, metadata: dict) -> bool:
 
         client = get_chroma_client()
         # Gets or creates ChromaDB collection named f"session_{session_id}"
-        collection = client.get_or_create_collection(name=f"session_{session_id}")
+        collection = client.get_or_create_collection(
+            name=f"session_{session_id}",
+            metadata={"hnsw:space": "cosine"}
+        )
 
         # Embed chunks
         model = load_embedding_model()
         embeddings = model.encode(chunks).tolist()
 
         # Add to collection
+        logger.info(f"Created {len(chunks)} chunks, embedding now...")
         collection.add(
             documents=chunks,
             embeddings=embeddings,
@@ -141,7 +146,9 @@ def index_session(session_id: str, transcript: str, metadata: dict) -> bool:
         logger.info(f"Indexed {len(chunks)} chunks for session {session_id}")
         return True
     except Exception as e:
-        logger.error(f"Error indexing session {session_id}: {e}")
+        import traceback
+        logger.error(f"RAG indexing FAILED for session {session_id}. Error type: {type(e).__name__}. Error: {str(e)}")
+        logger.error(traceback.format_exc())
         return False
 
 
