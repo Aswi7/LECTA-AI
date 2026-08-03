@@ -246,22 +246,26 @@ def process_audio():
         save_result(session_id, full_response)
         
         try:
+            from modules.rag_chat import index_session
             indexed = index_session(
                 session_id=session_id,
                 transcript=transcript,
                 metadata={
-                  "filename": topic_name, 
-                  "language": lang_data.get("code", "en")
+                    "filename": topic_name,
+                    "language": lang_data.get("code", "en")
                 }
             )
             if indexed:
                 pipeline_steps.append("rag_indexed")
-                logger.info(f"RAG index built for {session_id}")
+                logger.info(
+                  f"RAG index built successfully for {session_id}")
             else:
-                logger.warning(f"RAG indexing returned False for {session_id}")
+                logger.error(
+                  f"RAG index_session returned False for {session_id}")
         except Exception as e:
-            logger.warning(
-              f"RAG indexing failed for {session_id}: {e}")
+            import traceback
+            logger.error(f"RAG import or call failed: {str(e)}")
+            logger.error(traceback.format_exc())
         
         return jsonify(full_response), 200
 
