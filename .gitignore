@@ -26,3 +26,7 @@ outputs/
 *.pdf
 *.docx
 *.txt
+
+# ChromaDB vector database
+chroma_db/
+backend/chroma_db/
