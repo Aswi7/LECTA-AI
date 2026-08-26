@@ -247,7 +247,7 @@ def generate_with_ollama(prompt: str, model: str = None, base_url: str = None) -
         "stream": False
     }
     logger.info(f"Calling local Ollama LLM at {url} with model {model}")
-    response = requests.post(url, json=payload, timeout=120)
+    response = requests.post(url, json=payload, timeout=(3.0, 30.0))
     response.raise_for_status()
     data = response.json()
     return data.get("response", "").strip()
