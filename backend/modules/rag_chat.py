@@ -1,5 +1,6 @@
 import os
 import logging
+import requests
 from typing import Any
 from sentence_transformers import SentenceTransformer  # type: ignore
 import chromadb  # type: ignore
@@ -45,7 +46,7 @@ def get_chroma_client() -> Any:
     return _chroma_client
 
 
-def chunk_transcript(text: str, chunk_size: int = 500, overlap: int = 50) -> list[str]:
+def chunk_transcript(text: str, chunk_size: int = 1000, overlap: int = 150) -> list[str]:
     """Splits a transcript into overlapping chunks at sentence boundaries.
 
     Args:
@@ -175,7 +176,7 @@ def index_session(session_id: str, transcript: str, metadata: dict) -> bool:
         return False
 
 
-def retrieve_relevant_chunks(session_id: str, question: str, top_k: int = 3) -> list[dict]:
+def retrieve_relevant_chunks(session_id: str, question: str, top_k: int = 5) -> list[dict]:
     """Retrieves relevant chunks from ChromaDB.
 
     Args:
@@ -223,8 +224,56 @@ def retrieve_relevant_chunks(session_id: str, question: str, top_k: int = 3) -> 
         return []
 
 
+def generate_with_ollama(prompt: str, model: str = None, base_url: str = None) -> str:
+    """Generates text completion using local Ollama REST API.
+
+    Args:
+        prompt (str): The input prompt.
+        model (str, optional): Ollama model name.
+        base_url (str, optional): Ollama base URL.
+
+    Returns:
+        str: Generated text response.
+    """
+    if not base_url:
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    if not model:
+        model = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+
+    url = f"{base_url.rstrip('/')}/api/generate"
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False
+    }
+    logger.info(f"Calling local Ollama LLM at {url} with model {model}")
+    response = requests.post(url, json=payload, timeout=120)
+    response.raise_for_status()
+    data = response.json()
+    return data.get("response", "").strip()
+
+
+def generate_with_gemini(prompt: str) -> str:
+    """Generates text completion using Google Gemini API.
+
+    Args:
+        prompt (str): The input prompt.
+
+    Returns:
+        str: Generated text response.
+    """
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not api_key or api_key.startswith("your_actual_gemini_api_key"):
+        raise ValueError("Valid GEMINI_API_KEY or GOOGLE_API_KEY is not configured.")
+
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    response = model.generate_content(prompt)
+    return response.text.strip()
+
+
 def answer_question(session_id: str, question: str, chat_history: list[dict]) -> dict:
-    """Answers a question based on retrieved session index and chat history using Google Gemini API.
+    """Answers a question based on retrieved session index and chat history using Ollama or Gemini.
 
     Args:
         session_id (str): The session ID.
@@ -234,7 +283,7 @@ def answer_question(session_id: str, question: str, chat_history: list[dict]) ->
     Returns:
         dict: The answer result.
     """
-    retrieved_chunks = retrieve_relevant_chunks(session_id, question)
+    retrieved_chunks = retrieve_relevant_chunks(session_id, question, top_k=5)
     if not retrieved_chunks:
         return {
             "answer": "I couldn't find information about this in the lecture notes. Try rephrasing or asking about a topic from the lecture.",
@@ -247,55 +296,66 @@ def answer_question(session_id: str, question: str, chat_history: list[dict]) ->
     similarities = [chunk["similarity"] for chunk in retrieved_chunks]
     confidence = sum(similarities) / len(similarities) if similarities else 0.0
 
-    try:
-        # Build conversation history string (last 3 messages)
-        last_messages = chat_history[-3:] if chat_history else []
-        history_lines = []
-        for msg in last_messages:
-            role = msg.get("role", "").lower()
-            content = msg.get("text") or msg.get("content") or ""
-            if role in ["user", "student", "student:"]:
-                history_lines.append(f"Student: {content}")
-            elif role in ["assistant", "assistant:"]:
-                history_lines.append(f"Assistant: {content}")
-            else:
-                history_lines.append(f"{role.capitalize()}: {content}")
-        history_str = "\n".join(history_lines)
+    # Build conversation history string (last 3 messages)
+    last_messages = chat_history[-3:] if chat_history else []
+    history_lines = []
+    for msg in last_messages:
+        role = msg.get("role", "").lower()
+        content = msg.get("text") or msg.get("content") or ""
+        if role in ["user", "student", "student:"]:
+            history_lines.append(f"Student: {content}")
+        elif role in ["assistant", "assistant:"]:
+            history_lines.append(f"Assistant: {content}")
+        else:
+            history_lines.append(f"{role.capitalize()}: {content}")
+    history_str = "\n".join(history_lines)
 
-        joined_chunks = "\n\n".join(sources)
+    joined_chunks = "\n\n".join(sources)
 
-        prompt = (
-            "You are a study assistant. Answer ONLY using the lecture content below. "
-            "If answer not found, say so clearly. Do not add outside information.\n\n"
-            f"LECTURE CONTENT:\n{joined_chunks}\n\n"
-            f"CONVERSATION HISTORY:\n{history_str}\n\n"
-            f"STUDENT QUESTION: {question}\n\n"
-            "Answer clearly for exam preparation."
-        )
+    prompt = (
+        "You are a study assistant. Answer ONLY using the lecture content below. "
+        "If answer not found, say so clearly. Do not add outside information.\n\n"
+        f"LECTURE CONTENT:\n{joined_chunks}\n\n"
+        f"CONVERSATION HISTORY:\n{history_str}\n\n"
+        f"STUDENT QUESTION: {question}\n\n"
+        "Answer clearly for exam preparation."
+    )
 
-        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY or GOOGLE_API_KEY is not set in environment variables.")
+    provider = os.getenv("LLM_PROVIDER", "auto").lower()
+    answer = None
+    used_provider = None
 
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(prompt)
-        answer = response.text
+    # Strategy 1: Ollama first if provider is 'ollama' or 'auto'
+    if provider in ["ollama", "auto"]:
+        try:
+            answer = generate_with_ollama(prompt)
+            used_provider = "ollama"
+        except Exception as e:
+            logger.warning(f"Ollama generation attempt failed: {e}")
 
+    # Strategy 2: Gemini fallback or primary if provider is 'gemini' or 'auto' fallback
+    if not answer and provider in ["gemini", "auto"]:
+        try:
+            answer = generate_with_gemini(prompt)
+            used_provider = "gemini"
+        except Exception as e:
+            logger.warning(f"Gemini generation attempt failed: {e}")
+
+    if answer:
         return {
             "answer": answer,
             "sources": sources,
             "confidence": float(confidence),
-            "used_rag": True
+            "used_rag": True,
+            "provider": used_provider
         }
-    except Exception as e:
-        logger.error(f"Google Gemini API error answering question for session {session_id}: {e}")
-        return {
-            "answer": "An error occurred while calling the AI assistant. Please try again later.",
-            "sources": sources,
-            "confidence": float(confidence),
-            "used_rag": True
-        }
+
+    return {
+        "answer": "An error occurred while communicating with the local LLM and cloud AI models. Ensure Ollama is running (`ollama serve`) or a valid GEMINI_API_KEY is provided.",
+        "sources": sources,
+        "confidence": float(confidence),
+        "used_rag": True
+    }
 
 
 def delete_session_index(session_id: str) -> bool:

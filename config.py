@@ -27,6 +27,11 @@ class Config:
     # ML Model Configuration
     WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "base")
 
+    # LLM & RAG Configuration
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "auto")  # 'auto', 'ollama', or 'gemini'
+    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+
     @classmethod
     def validate_config(cls):
         """

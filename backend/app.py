@@ -622,6 +622,43 @@ def chat_status(session_id):
         }), 200
 
 
+@app.route('/api/reindex/<session_id>', methods=['GET', 'POST'])
+def reindex_session_api(session_id):
+    try:
+        session_data = get_result(session_id)
+        if not session_data:
+            return jsonify({"error": "Session not found", "session_id": session_id}), 404
+
+        from modules.rag_chat import index_session
+        success = index_session(
+            session_id=session_id,
+            transcript=session_data.get("transcript", ""),
+            metadata={
+                "filename": session_data.get("filename", ""),
+                "language": session_data.get("language", {}).get("code", "en")
+            }
+        )
+
+        if success:
+            # Add rag_indexed to pipeline_steps if not present
+            pipeline_steps = session_data.get("pipeline_steps", [])
+            if "rag_indexed" not in pipeline_steps:
+                pipeline_steps.append("rag_indexed")
+                session_data["pipeline_steps"] = pipeline_steps
+                save_result(session_id, session_data)
+
+            return jsonify({
+                "success": True,
+                "session_id": session_id,
+                "message": "Session reindexed successfully"
+            }), 200
+        else:
+            return jsonify({"success": False, "error": "Indexing failed"}), 500
+    except Exception as e:
+        logger.error(f"Error in reindex endpoint for {session_id}: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 if __name__ == '__main__':
     os.makedirs(CONFIG.UPLOAD_FOLDER, exist_ok=True)
     os.makedirs(CONFIG.EXPORTS_FOLDER, exist_ok=True)

@@ -165,10 +165,91 @@ def generate_true_false(sentences: List[str]) -> List[Dict[str, Any]]:
                 
     return questions
 
+import json
+import os
+import requests
+
+def generate_questions_with_llm(text: str, max_questions: int = 8) -> List[Dict[str, Any]]:
+    """Generates high-quality exam questions using Ollama or Gemini API with JSON output parsing."""
+    if not text or len(text.strip()) < 50:
+        return []
+
+    prompt = (
+        f"You are an expert professor. Read the lecture content below and generate {max_questions} exam questions. "
+        "Create a mix of Multiple Choice Questions (MCQs), True/False questions, and Short Answer questions.\n\n"
+        "Output ONLY a raw JSON array of objects with no markdown fences, no ```json formatting, and no conversational text.\n"
+        "Each object must contain:\n"
+        '  "question": (string question text)\n'
+        '  "options": (list of 4 string options for MCQ, or ["True", "False"] for True/False, or [] for Short Answer)\n'
+        '  "answer": (string correct answer)\n'
+        '  "type": ("mcq", "true_false", or "short_answer")\n'
+        '  "difficulty": ("easy", "medium", or "hard")\n\n'
+        f"LECTURE CONTENT:\n{text[:4000]}"
+    )
+
+    provider = os.getenv("LLM_PROVIDER", "auto").lower()
+    raw_response = None
+
+    # Strategy 1: Try Ollama first
+    if provider in ["ollama", "auto"]:
+        try:
+            base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip('/')
+            model = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+            res = requests.post(
+                f"{base_url}/api/generate",
+                json={"model": model, "prompt": prompt, "stream": False},
+                timeout=120
+            )
+            if res.status_code == 200:
+                raw_response = res.json().get("response", "").strip()
+        except Exception as e:
+            logger.warning(f"Ollama question generation attempt failed: {e}")
+
+    # Strategy 2: Try Gemini fallback
+    if not raw_response and provider in ["gemini", "auto"]:
+        try:
+            try:
+                from modules.rag_chat import generate_with_gemini
+            except ImportError:
+                from backend.modules.rag_chat import generate_with_gemini
+            raw_response = generate_with_gemini(prompt)
+        except Exception as e:
+            logger.warning(f"Gemini question generation attempt failed: {e}")
+
+    if not raw_response:
+        return []
+
+    # Clean JSON output
+    clean_json = raw_response.strip()
+    if clean_json.startswith("```"):
+        lines = clean_json.splitlines()
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        clean_json = "\n".join(lines).strip()
+
+    try:
+        data = json.loads(clean_json)
+        if isinstance(data, list) and len(data) > 0:
+            logger.info(f"Successfully generated {len(data)} AI exam questions")
+            return data[:max_questions]
+    except Exception as e:
+        logger.error(f"Failed to parse AI question JSON response: {e}")
+
+    return []
+
+
 def generate_questions(sentences: List[str], keywords: List[Dict[str, Any]], max_questions: int = 10) -> List[Dict[str, Any]]:
     """
-    Combines, deduplicates, and balances question types.
+    Combines AI LLM question generation with spaCy rule-based fallback.
     """
+    full_text = " ".join(sentences)
+    ai_questions = generate_questions_with_llm(full_text, max_questions=max_questions)
+    if ai_questions:
+        return ai_questions
+
+    logger.info("Falling back to spaCy rule-based question generation")
     all_qs = []
     all_qs.extend(generate_definition_questions(sentences))
     all_qs.extend(generate_fill_in_blank(sentences, keywords))
@@ -187,7 +268,6 @@ def generate_questions(sentences: List[str], keywords: List[Dict[str, Any]], max
             unique_qs.append(q)
             
     # Balancing: 40% fill-blank, 30% true/false, 30% definition
-    # Calculate targets
     fill_blank_qs = [q for q in unique_qs if q["type"] == "fill_blank"]
     tf_qs = [q for q in unique_qs if q["type"] == "true_false"]
     def_qs = [q for q in unique_qs if q["type"] == "definition"]
