@@ -1,3 +1,4 @@
+import re
 import random
 import logging
 from typing import List, Dict, Any
@@ -17,6 +18,35 @@ except OSError:
     from spacy.cli import download
     download("en_core_web_sm")
     nlp = spacy.load("en_core_web_sm")
+
+META_FILLER_PATTERNS = [
+    r"\bwelcome\b", r"\bsubscribe\b", r"\bchannel\b", r"\bvideo\b", r"\blecture\b",
+    r"\btoday's\b", r"\bin this video\b", r"\bin this lecture\b", r"\blet's get started\b",
+    r"\bthanks for watching\b", r"\blike and subscribe\b", r"\bhope you\b", r"\bdon't forget\b",
+    r"\bhello everyone\b", r"\bhi guys\b", r"\bsee you\b", r"\bcomment below\b",
+    r"\bmoving on to\b", r"\bnext topic\b", r"\bpresentation\b", r"\bslide\b",
+    r"\bas i said\b", r"\bas we discussed\b", r"\bin the previous\b", r"\bwelcome back\b",
+    r"\bmy name is\b", r"\btoday we are\b", r"\btoday we will\b", r"\bcheck out\b",
+    r"\bmake sure to\b", r"\bin this tutorial\b"
+]
+
+def is_meta_or_filler_sentence(sent: str) -> bool:
+    """Checks if a sentence is meta-commentary, video intro/outro, or conversational filler."""
+    lowercased = sent.lower().strip()
+    for pattern in META_FILLER_PATTERNS:
+        if re.search(pattern, lowercased):
+            return True
+    return False
+
+def is_valid_subject(subject: str) -> bool:
+    """Validates if a subject noun chunk is suitable for a definition question."""
+    low = subject.lower().strip()
+    if not low or len(low) < 3:
+        return False
+    bad_words = {"this", "that", "it", "they", "we", "he", "she", "here", "there", "what", "which", "video", "topic", "lecture", "today", "channel"}
+    if low in bad_words or any(bw in low.split() for bw in bad_words):
+        return False
+    return True
 
 def get_difficulty(sentence: str) -> str:
     """
@@ -50,25 +80,23 @@ def generate_definition_questions(sentences: List[str]) -> List[Dict[str, Any]]:
     questions = []
     
     for sent in sentences:
+        if is_meta_or_filler_sentence(sent):
+            continue
         lowercased = sent.lower()
         matched_pattern = next((p for p in patterns if p in lowercased), None)
         
         if matched_pattern:
             doc = nlp(sent)
-            # Find the subject before the pattern
-            # We look for the verb or the start of the pattern and take the preceding noun chunk
             subject = ""
             pattern_start_idx = lowercased.find(matched_pattern)
             
-            # Use dependency parsing to find the root subject
             for chunk in doc.noun_chunks:
                 if chunk.end_char <= pattern_start_idx:
                     subject = chunk.text
                 else:
                     break
             
-            if subject:
-                # Basic cleaning
+            if subject and is_valid_subject(subject):
                 subject = subject.strip().capitalize()
                 questions.append({
                     "question": f"What is {subject}?",
@@ -87,15 +115,15 @@ def generate_fill_in_blank(sentences: List[str], keywords: List[Dict[str, Any]])
     keyword_list = [kw["keyword"] for kw in keywords]
     
     for sent in sentences:
+        if is_meta_or_filler_sentence(sent):
+            continue
         for kw in keyword_list:
-            # Case-insensitive check, but must match whole word
-            # We use spaCy for cleaner token matching
+            if not kw or len(kw.strip()) < 3:
+                continue
             doc = nlp(sent)
             matches = [token for token in doc if token.text.lower() == kw.lower()]
             
             if len(matches) == 1:
-                # Replace the specific match (respecting original case in the placeholder if needed)
-                # but requirements say "replace it with ______"
                 start = matches[0].idx
                 end = start + len(matches[0].text)
                 masked_sent = sent[:start] + "______" + sent[end:]
@@ -106,7 +134,6 @@ def generate_fill_in_blank(sentences: List[str], keywords: List[Dict[str, Any]])
                     "type": "fill_blank",
                     "difficulty": get_difficulty(sent)
                 })
-                # Move to next sentence to avoid multiple questions for same sentence
                 break
                 
     return questions
@@ -118,13 +145,17 @@ def generate_true_false(sentences: List[str]) -> List[Dict[str, Any]]:
     questions = []
     
     for sent in sentences:
+        if is_meta_or_filler_sentence(sent):
+            continue
         doc = nlp(sent)
         word_count = len([t for t in doc if not t.is_punct])
         
-        # Use declarative sentences between 8 and 25 words
+        # Must have at least 1 noun chunk or entity to ensure factual substance
+        if not list(doc.noun_chunks) and not list(doc.ents):
+            continue
+
         if 8 <= word_count <= 25:
             diff = get_difficulty(sent)
-            # Add the "True" variant
             questions.append({
                 "question": f"True or False: {sent}",
                 "answer": "True",
@@ -132,27 +163,15 @@ def generate_true_false(sentences: List[str]) -> List[Dict[str, Any]]:
                 "difficulty": diff
             })
             
-            # Generate "False" variant by negating the root verb
-            # Find the root verb
             root = next((token for token in doc if token.head == token and token.pos_ == "VERB"), None)
-            
-            # Handle "is/are/was/were" specifically if root is AUX or if root not found
             if not root:
                 root = next((token for token in doc if token.pos_ == "AUX"), None)
                 
             if root:
-                # Logic: Prepend "not" or "does not" based on verb
-                # Simplified: "not " + root.text
-                negation = "not "
                 if root.lemma_ == "be":
-                    # Photosynthesis is -> Photosynthesis is not
-                    # We inject 'not' after the aux
                     idx = root.idx + len(root.text)
                     false_sent = sent[:idx] + " not" + sent[idx:]
                 else:
-                    # Uses -> does not use (more complex, let's stick to the prompt's "prepend NOT to root verb")
-                    # "replacing a key noun with 'NOT' prepended to the root verb"
-                    # Interpretation: Prepend 'NOT' to the verb.
                     idx = root.idx
                     false_sent = sent[:idx] + "NOT " + sent[idx:]
                 
@@ -175,8 +194,13 @@ def generate_questions_with_llm(text: str, max_questions: int = 8) -> List[Dict[
         return []
 
     prompt = (
-        f"You are an expert professor. Read the lecture content below and generate {max_questions} exam questions. "
-        "Create a mix of Multiple Choice Questions (MCQs), True/False questions, and Short Answer questions.\n\n"
+        f"You are an expert academic professor creating an official exam. Read the lecture content below and generate {max_questions} high-yield, conceptually important exam questions.\n\n"
+        "STRICT QUALITY & RELEVANCE RULES:\n"
+        "1. Focus ONLY on core academic, scientific, or factual concepts taught in the lecture.\n"
+        "2. STRICTLY IGNORE conversational filler, greetings, channel plugs, speaker intros/outros, or meta-comments (e.g. NEVER ask 'What is discussed in this video?' or 'True/False: Welcome to class').\n"
+        "3. Create a balanced mix of Multiple Choice Questions (MCQs), True/False questions, and Short Answer questions.\n"
+        "4. For MCQs, provide 4 distinct, highly plausible domain-specific options.\n"
+        "5. Ensure every question tests real understanding of the subject matter.\n\n"
         "Output ONLY a raw JSON array of objects with no markdown fences, no ```json formatting, and no conversational text.\n"
         "Each object must contain:\n"
         '  "question": (string question text)\n'
@@ -198,7 +222,7 @@ def generate_questions_with_llm(text: str, max_questions: int = 8) -> List[Dict[
             res = requests.post(
                 f"{base_url}/api/generate",
                 json={"model": model, "prompt": prompt, "stream": False},
-                timeout=120
+                timeout=5
             )
             if res.status_code == 200:
                 raw_response = res.json().get("response", "").strip()
@@ -244,16 +268,26 @@ def generate_questions(sentences: List[str], keywords: List[Dict[str, Any]], max
     """
     Combines AI LLM question generation with spaCy rule-based fallback.
     """
-    full_text = " ".join(sentences)
+    clean_sentences = [s for s in sentences if not is_meta_or_filler_sentence(s)]
+    if not clean_sentences:
+        clean_sentences = sentences
+
+    full_text = " ".join(clean_sentences)
     ai_questions = generate_questions_with_llm(full_text, max_questions=max_questions)
+    
     if ai_questions:
-        return ai_questions
+        filtered_ai_qs = [
+            q for q in ai_questions 
+            if isinstance(q, dict) and "question" in q and not is_meta_or_filler_sentence(q["question"])
+        ]
+        if filtered_ai_qs:
+            return filtered_ai_qs[:max_questions]
 
     logger.info("Falling back to spaCy rule-based question generation")
     all_qs = []
-    all_qs.extend(generate_definition_questions(sentences))
-    all_qs.extend(generate_fill_in_blank(sentences, keywords))
-    all_qs.extend(generate_true_false(sentences))
+    all_qs.extend(generate_definition_questions(clean_sentences))
+    all_qs.extend(generate_fill_in_blank(clean_sentences, keywords))
+    all_qs.extend(generate_true_false(clean_sentences))
     
     # Deduplicate by similarity
     unique_qs = []

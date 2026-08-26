@@ -60,11 +60,17 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def download_audio_from_url(url, session_id):
-    """Downloads audio from a URL (YouTube, etc.) using yt-dlp with browser cookies."""
+    """Downloads audio from a URL (YouTube, etc.) using yt-dlp with fallback extractor client args."""
     output_path = os.path.join(CONFIG.UPLOAD_FOLDER, f"{session_id}_downloaded")
     
+    common_extractor_args = {
+        'youtube': {
+            'player_client': ['mweb', 'android', 'web_creator']
+        }
+    }
+
     ydl_opts_cookies = {
-        'format': 'bestaudio/best',
+        'format': 'ba/b',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -73,6 +79,7 @@ def download_audio_from_url(url, session_id):
         'outtmpl': output_path + '.%(ext)s',
         'quiet': True,
         'no_warnings': True,
+        'extractor_args': common_extractor_args,
         'cookiesfrombrowser': ('chrome', 'firefox', 'edge', 'opera', 'brave', 'safari', 'vivaldi'),
         'nocheckcertificate': True,
     }
@@ -87,7 +94,7 @@ def download_audio_from_url(url, session_id):
         logger.warning(f"Failed to download using browser cookies: {e}. Retrying without cookies...")
         
         ydl_opts_no_cookies = {
-            'format': 'bestaudio/best',
+            'format': 'ba/b',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
@@ -96,6 +103,7 @@ def download_audio_from_url(url, session_id):
             'outtmpl': output_path + '.%(ext)s',
             'quiet': True,
             'no_warnings': True,
+            'extractor_args': common_extractor_args,
             'nocheckcertificate': True,
         }
         
