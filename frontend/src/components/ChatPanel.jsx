@@ -127,20 +127,25 @@ const ChatPanel = ({ sessionId, isIndexed: isIndexedProp }) => {
   };
 
   return (
-    <div className="flex flex-col h-[600px] bg-gray-50/50 dark:bg-gray-900/50 rounded-3xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+    <div className="flex flex-col h-[580px] bg-slate-50/80 dark:bg-slate-950/80 rounded-3xl border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-inner">
       {/* Index Status Banner */}
       {!isIndexed && (
-        <div className="bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 px-6 py-3 border-b border-amber-100 dark:border-amber-900/50 text-sm font-semibold flex items-center space-x-2">
-          <span>⏳ Chat indexing in progress. Please wait a moment and refresh.</span>
+        <div className="bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 px-6 py-2.5 border-b border-amber-200/80 dark:border-amber-900/50 text-xs font-bold flex items-center space-x-2">
+          <span className="animate-pulse">⏳</span>
+          <span>Vector indexing in progress. Please allow a few seconds for semantic search ready status.</span>
         </div>
       )}
 
       {/* Chat Messages Area */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-8">
-            <p className="text-gray-400 dark:text-gray-500 italic max-w-md text-base leading-relaxed">
-              👋 Hi! I have read this entire lecture. Ask me anything — definitions, what the professor said about specific topics, or concepts you want to understand better.
+          <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-brand-50 dark:bg-brand-950/60 border border-brand-200 dark:border-brand-800 flex items-center justify-center text-brand-600 dark:text-brand-400 text-xl font-bold">
+              💬
+            </div>
+            <h4 className="text-base font-extrabold text-slate-900 dark:text-white">Ask your AI Lecture Tutor</h4>
+            <p className="text-slate-500 dark:text-slate-400 max-w-sm text-xs leading-relaxed font-normal">
+              I have indexed the full lecture transcript into ChromaDB vector memory. Ask any clarification questions or exam preparation prompts!
             </p>
           </div>
         ) : (
@@ -151,28 +156,29 @@ const ChatPanel = ({ sessionId, isIndexed: isIndexedProp }) => {
             >
               {msg.role === 'student' ? (
                 /* Student Message Bubble */
-                <div className="max-w-[80%] bg-blue-500 text-white rounded-2xl px-4 py-2 text-sm font-medium shadow-sm leading-relaxed">
+                <div className="max-w-[80%] bg-brand-600 text-white rounded-2xl px-4 py-3 text-sm font-semibold shadow-md leading-relaxed">
                   {msg.content}
                 </div>
               ) : (
                 /* Assistant Message Bubble */
                 <div className="max-w-[85%] space-y-2">
-                  <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-100 rounded-2xl px-4 py-3 text-sm shadow-sm leading-relaxed whitespace-pre-wrap">
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-2xl px-5 py-4 text-sm font-medium shadow-xs leading-relaxed whitespace-pre-wrap">
                     {msg.content}
                   </div>
 
                   {/* Sources display */}
                   {msg.sources && msg.sources.length > 0 && (
-                    <div className="space-y-1">
+                    <div className="space-y-1.5 pt-1">
                       <button
+                        type="button"
                         onClick={() => toggleSources(msg.id)}
-                        className="text-xs font-black text-brand-600 dark:text-brand-400 hover:underline flex items-center space-x-1"
+                        className="text-xs font-black text-brand-600 dark:text-brand-400 hover:underline flex items-center space-x-1 cursor-pointer"
                       >
-                        <span>📚 {expandedSources[msg.id] ? "Hide Sources" : "Show Sources"}</span>
+                        <span>📚 {expandedSources[msg.id] ? "Hide Citation Sources" : "View Citation Sources"}</span>
                       </button>
 
                       {expandedSources[msg.id] && (
-                        <div className="space-y-2 pl-3 border-l-2 border-brand-400 dark:border-brand-600 bg-gray-100/50 dark:bg-gray-800/30 p-2.5 rounded-lg text-xs italic text-gray-600 dark:text-gray-400">
+                        <div className="space-y-2 pl-3 border-l-2 border-brand-500 bg-slate-100 dark:bg-slate-900/60 p-3 rounded-xl text-xs italic text-slate-600 dark:text-slate-400">
                           {msg.sources.map((src, idx) => (
                             <div key={idx} className="mb-1 leading-relaxed">
                               "{src}"
@@ -185,19 +191,19 @@ const ChatPanel = ({ sessionId, isIndexed: isIndexedProp }) => {
 
                   {/* Confidence progress bar */}
                   {msg.confidence !== undefined && (
-                    <div className="w-40 space-y-1">
-                      <div className="flex justify-between items-center text-[9px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-wider">
-                        <span>Confidence</span>
+                    <div className="w-36 space-y-1 pt-1">
+                      <div className="flex justify-between items-center text-[9px] text-slate-400 dark:text-slate-500 font-extrabold uppercase tracking-wider">
+                        <span>Relevance</span>
                         <span>{Math.round(msg.confidence * 100)}%</span>
                       </div>
-                      <div className="w-full h-1 bg-gray-100 dark:bg-gray-800 rounded overflow-hidden">
+                      <div className="w-full h-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                         <div
-                          className={`h-full rounded transition-all duration-500 ${
-                            msg.confidence > 0.8
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            msg.confidence > 0.6
                               ? 'bg-emerald-500'
-                              : msg.confidence > 0.6
+                              : msg.confidence > 0.4
                                 ? 'bg-amber-500'
-                                : 'bg-red-500'
+                                : 'bg-rose-500'
                           }`}
                           style={{ width: `${msg.confidence * 100}%` }}
                         />
@@ -213,19 +219,10 @@ const ChatPanel = ({ sessionId, isIndexed: isIndexedProp }) => {
         {/* Loading Indicator */}
         {isLoading && (
           <div className="flex flex-col items-start">
-            <div className="flex space-x-1.5 items-center p-3 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm w-max">
-              <div
-                className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                style={{ animationDelay: '-0.3s' }}
-              />
-              <div
-                className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                style={{ animationDelay: '-0.15s' }}
-              />
-              <div
-                className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                style={{ animationDelay: '0s' }}
-              />
+            <div className="flex space-x-1.5 items-center p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs w-max">
+              <div className="w-2 h-2 bg-brand-500 rounded-full animate-bounce" style={{ animationDelay: '-0.3s' }} />
+              <div className="w-2 h-2 bg-brand-500 rounded-full animate-bounce" style={{ animationDelay: '-0.15s' }} />
+              <div className="w-2 h-2 bg-brand-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
             </div>
           </div>
         )}
@@ -234,7 +231,7 @@ const ChatPanel = ({ sessionId, isIndexed: isIndexedProp }) => {
       </div>
 
       {/* Input Area */}
-      <div className="p-4 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">
+      <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-200/80 dark:border-slate-800">
         <form onSubmit={handleSend} className="space-y-2">
           <div className="flex space-x-2 items-end">
             <textarea
@@ -244,23 +241,23 @@ const ChatPanel = ({ sessionId, isIndexed: isIndexedProp }) => {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isLoading}
-              placeholder={isIndexed ? "Ask anything about this lecture..." : "Chat is disabled while indexing..."}
-              className="flex-1 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-750 text-sm text-gray-800 dark:text-gray-100 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-none max-h-[120px] disabled:opacity-60"
+              placeholder={isIndexed ? "Ask any question about this lecture..." : "Indexing vector memory..."}
+              className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-sm text-slate-900 dark:text-slate-100 font-medium rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-500/50 resize-none max-h-[120px] disabled:opacity-60 placeholder-slate-400"
             />
             <button
               type="submit"
               disabled={isLoading || !input.trim() || !isIndexed}
-              className="bg-blue-500 hover:bg-blue-600 active:bg-blue-700 disabled:bg-gray-200 dark:disabled:bg-gray-700 text-white rounded-xl px-4 py-2.5 text-sm font-bold shadow transition-all duration-300 disabled:opacity-60 disabled:shadow-none"
+              className="bg-brand-600 hover:bg-brand-500 active:bg-brand-700 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white rounded-2xl px-5 py-3 text-sm font-black shadow-md transition-all duration-300 disabled:opacity-50 disabled:shadow-none cursor-pointer"
             >
               Send
             </button>
           </div>
           <div className="flex justify-between items-center px-1">
-            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">
-              Ask anything about this lecture
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider">
+              Grounded strictly in lecture transcript
             </span>
             {error && (
-              <span className="text-[10px] text-red-500 font-bold">
+              <span className="text-[10px] text-rose-500 font-bold">
                 {error}
               </span>
             )}

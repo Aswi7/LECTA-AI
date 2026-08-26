@@ -3,45 +3,51 @@ import { Sparkles, Loader2, BrainCircuit, Mic2, FileSearch } from 'lucide-react'
 
 const ProgressTracker = () => {
   const steps = [
-    { icon: <Mic2 className="w-5 h-5" />, label: 'Transcribing Audio' },
-    { icon: <BrainCircuit className="w-5 h-5" />, label: 'Analysing Context' },
+    { icon: <Mic2 className="w-5 h-5" />, label: 'Transcribing Speech' },
+    { icon: <BrainCircuit className="w-5 h-5" />, label: 'Analyzing Context' },
     { icon: <FileSearch className="w-5 h-5" />, label: 'Generating Summary' },
-    { icon: <Sparkles className="w-5 h-5" />, label: 'Crafting Quiz' },
+    { icon: <Sparkles className="w-5 h-5" />, label: 'Crafting Quiz & RAG' },
   ];
 
   return (
-    <div className="max-w-2xl mx-auto py-20 px-8 bg-white dark:bg-gray-900 rounded-7xl shadow-2xl shadow-brand-500/10 dark:shadow-brand-950/20 border border-gray-100 dark:border-gray-800 flex flex-col items-center text-center transition-colors">
-      <div className="relative mb-12">
-        <div className="absolute inset-0 bg-brand-500 rounded-full blur-3xl opacity-20 animate-pulse" />
-        <div className="relative bg-brand-600 p-8 rounded-5xl shadow-xl">
-          <Loader2 className="w-12 h-12 text-white animate-spin" />
+    <div className="max-w-2xl mx-auto py-16 px-8 bg-white dark:bg-slate-900 rounded-3xl shadow-xl shadow-brand-500/5 border border-slate-200/80 dark:border-slate-800 flex flex-col items-center text-center transition-colors">
+      {/* Animated Spinner Icon */}
+      <div className="relative mb-8">
+        <div className="absolute inset-0 bg-brand-500 rounded-full blur-2xl opacity-30 animate-pulse" />
+        <div className="relative bg-gradient-to-br from-brand-500 to-brand-700 p-6 rounded-3xl shadow-lg border border-brand-400/30">
+          <Loader2 className="w-10 h-10 text-white animate-spin" />
         </div>
       </div>
 
-      <h2 className="text-3xl font-black text-gray-900 dark:text-white mb-4">Analysing your Lecture</h2>
-      <p className="text-gray-500 dark:text-gray-400 font-medium mb-12">Our AI is extracting key concepts and generating your study materials. This usually takes 15-30 seconds.</p>
+      {/* Main Title & Subtitle */}
+      <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white mb-2 font-heading">Analyzing Your Lecture</h2>
+      <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-10 font-normal leading-relaxed">
+        Our AI pipeline is extracting concepts, building your summary, translating notes, and preparing practice quizzes. This typically takes 15–30 seconds.
+      </p>
 
-      <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Step Cards Grid */}
+      <div className="w-full grid grid-cols-2 sm:grid-cols-4 gap-3">
         {steps.map((step, i) => (
           <motion.div 
             key={i}
-            initial={{ opacity: 0.3 }}
+            initial={{ opacity: 0.4 }}
             animate={{ opacity: 1 }}
-            transition={{ repeat: Infinity, duration: 2, delay: i * 0.4, repeatType: 'reverse' }}
-            className="flex flex-col items-center space-y-3 p-4 rounded-2xl bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700"
+            transition={{ repeat: Infinity, duration: 1.8, delay: i * 0.3, repeatType: 'reverse' }}
+            className="flex flex-col items-center space-y-2 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800"
           >
-            <div className="text-brand-500 dark:text-brand-400">{step.icon}</div>
-            <span className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest leading-tight">{step.label}</span>
+            <div className="text-brand-600 dark:text-brand-400 p-1.5 bg-brand-50 dark:bg-brand-950/80 rounded-xl">{step.icon}</div>
+            <span className="text-[10px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider leading-tight">{step.label}</span>
           </motion.div>
         ))}
       </div>
       
-      <div className="mt-12 w-full max-w-xs h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+      {/* Animated Gradient Progress Line */}
+      <div className="mt-10 w-full max-w-sm h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden border border-slate-200/60 dark:border-slate-800">
         <motion.div 
           initial={{ x: '-100%' }}
           animate={{ x: '100%' }}
-          transition={{ repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
-          className="w-1/2 h-full bg-linear-to-r from-transparent via-brand-500 to-transparent"
+          transition={{ repeat: Infinity, duration: 1.6, ease: 'easeInOut' }}
+          className="w-1/2 h-full bg-gradient-to-r from-transparent via-brand-500 to-transparent"
         />
       </div>
     </div>
@@ -49,3 +55,4 @@ const ProgressTracker = () => {
 };
 
 export default ProgressTracker;
+

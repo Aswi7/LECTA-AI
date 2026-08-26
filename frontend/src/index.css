@@ -1,51 +1,63 @@
 @import "tailwindcss";
 
-@theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "Outfit", ui-sans-serif, system-ui, sans-serif;
-  
-  --color-brand-50: #f0f7ff;
-  --color-brand-100: #e0effe;
-  --color-brand-200: #bae0fd;
-  --color-brand-300: #7cc9fb;
-  --color-brand-400: #36adf7;
-  --color-brand-500: #0c93eb;
-  --color-brand-600: #0173c7;
-  --color-brand-700: #025ca1;
-  --color-brand-800: #064f85;
-  --color-brand-900: #0c426e;
-  --color-brand-950: #082a49;
+@custom-variant dark (&:where(.dark, .dark *));
 
-  --color-accent-50: #fdf2f8;
-  --color-accent-500: #ec4899;
-  --color-accent-600: #db2777;
+@theme {
+
+  --font-sans: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Outfit", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+  --color-brand-950: #1e1b4b;
+
+  --color-accent-50: #faf5ff;
+  --color-accent-500: #a855f7;
+  --color-accent-600: #9333ea;
 }
 
 /* Custom Animations */
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slide-down {
-  from { opacity: 0; transform: translateY(-10px); }
+  from { opacity: 0; transform: translateY(-12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes float-subtle {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
 .animate-fade-in {
-  animation: fade-in 0.4s ease-out forwards;
+  animation: fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-slide-down {
   animation: slide-down 0.3s ease-out forwards;
 }
 
+.animate-float {
+  animation: float-subtle 4s ease-in-out infinite;
+}
+
 :root {
-  --text: #374151;
-  --text-h: #111827;
-  --bg: #f9fafb;
-  --border: #e5e7eb;
-  --accent: #6366f1;
+  --text: #334155;
+  --text-h: #0f172a;
+  --bg: #f8fafc;
+  --border: #e2e8f0;
+  --accent: #4f46e5;
   
   font-family: var(--font-sans);
   background-color: var(--bg);
@@ -56,11 +68,11 @@
 
 /* Explicit dark class support */
 .dark {
-  --text: #9ca3af;
-  --text-h: #f9fafb;
+  --text: #94a3b8;
+  --text-h: #f8fafc;
   --bg: #030712;
-  --border: #1f2937;
-  --accent: #818cf8;
+  --border: #1e293b;
+  --accent: #6366f1;
   color-scheme: dark;
 }
 
@@ -74,24 +86,26 @@ body {
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
   color: var(--text-h);
+  letter-spacing: -0.02em;
 }
 
 /* Glassmorphism utility */
 .glass {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
 }
 
 .dark .glass {
-  background: rgba(17, 24, 39, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(30, 41, 59, 0.8);
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 7px;
+  height: 7px;
 }
 
 ::-webkit-scrollbar-track {
@@ -99,25 +113,30 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 4px;
+  background: #cbd5e1;
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: #94a3b8;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: #374151;
+  background: #334155;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }
 
 /* Selection */
 ::selection {
-  background-color: #bae0fd;
-  color: #0c426e;
+  background-color: #c7d2fe;
+  color: #1e1b4b;
 }
 
 .dark ::selection {
-  background-color: #0c426e;
-  color: #bae0fd;
+  background-color: #312e81;
+  color: #e0e7ff;
 }
+

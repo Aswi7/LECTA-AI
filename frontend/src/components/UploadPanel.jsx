@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Upload, Link as LinkIcon, Mic, X, CheckCircle, ChevronDown, FileAudio, Globe } from 'lucide-react';
+import { Upload, Link as LinkIcon, Mic, X, CheckCircle, ChevronDown, FileAudio, Globe, Sparkles, FileText, HelpCircle } from 'lucide-react';
 import LiveRecorder from './LiveRecorder';
 
 const SUPPORTED_LANGUAGES = [
@@ -80,60 +80,67 @@ const UploadPanel = ({ onSubmit, isLoading }) => {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto">
+    <div className="w-full max-w-4xl mx-auto space-y-8">
       {/* Top Tab Switcher */}
-      <div className="flex justify-center mb-8">
-        <div className="p-1.5 bg-gray-100 dark:bg-gray-800 rounded-2xl flex space-x-1 shadow-inner">
+      <div className="flex justify-center">
+        <div className="p-1.5 bg-slate-200/80 dark:bg-slate-900/90 rounded-2xl flex space-x-1.5 border border-slate-300/60 dark:border-slate-800 shadow-inner">
           <button
             onClick={() => setActiveTab('upload')}
-            className={`flex items-center space-x-2 px-8 py-3 rounded-xl font-bold transition-all duration-300 ${
-              activeTab === 'upload' ? 'bg-white dark:bg-gray-700 text-brand-600 dark:text-brand-400 shadow-md scale-105' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-white/50 dark:hover:bg-gray-700/50'
+            className={`flex items-center space-x-2 px-7 py-3 rounded-xl font-bold text-sm transition-all duration-300 cursor-pointer ${
+              activeTab === 'upload' 
+                ? 'bg-white dark:bg-slate-800 text-brand-600 dark:text-brand-400 shadow-md scale-[1.02]' 
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
-            <Upload className="w-5 h-5" />
-            <span>Upload & Link</span>
+            <Upload className="w-4 h-4" />
+            <span>Upload File &amp; URL</span>
           </button>
           <button
             onClick={() => setActiveTab('record')}
-            className={`flex items-center space-x-2 px-8 py-3 rounded-xl font-bold transition-all duration-300 ${
-              activeTab === 'record' ? 'bg-white dark:bg-gray-700 text-red-600 dark:text-red-400 shadow-md scale-105' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-white/50 dark:hover:bg-gray-700/50'
+            className={`flex items-center space-x-2 px-7 py-3 rounded-xl font-bold text-sm transition-all duration-300 cursor-pointer ${
+              activeTab === 'record' 
+                ? 'bg-white dark:bg-slate-800 text-red-600 dark:text-red-400 shadow-md scale-[1.02]' 
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             }`}
           >
-            <Mic className="w-5 h-5" />
-            <span>Live Record</span>
+            <Mic className="w-4 h-4" />
+            <span>Live Recording</span>
           </button>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-900 rounded-4xl shadow-2xl shadow-brand-100/20 dark:shadow-brand-900/10 border border-gray-100 dark:border-gray-800 overflow-hidden">
+      {/* Main Form Container Card */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl shadow-brand-500/5 dark:shadow-black/40 border border-slate-200/80 dark:border-slate-800 overflow-hidden">
         {activeTab === 'upload' ? (
-          <div className="p-10 md:p-12">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
+          <div className="p-8 sm:p-10">
+            {/* Header & Mode Switch */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
               <div>
-                <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mb-2">Process Lecture</h2>
-                <p className="text-gray-500 dark:text-gray-400">Choose a file or paste a video link to start.</p>
+                <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-heading">Process Lecture Source</h2>
+                <p className="text-slate-500 dark:text-slate-400 text-sm mt-0.5">Upload audio/video files or paste a direct video URL.</p>
               </div>
               
-              <div className="bg-gray-100 dark:bg-gray-800 p-1.5 rounded-xl flex self-start">
+              <div className="bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl flex border border-slate-200/60 dark:border-slate-700/60 self-start">
                 <button
                   onClick={() => setMode('file')}
-                  className={`flex items-center space-x-2 py-2 px-6 rounded-lg text-sm font-bold transition-all ${mode === 'file' ? 'bg-white dark:bg-gray-700 text-brand-600 dark:text-brand-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                  className={`flex items-center space-x-2 py-2 px-5 rounded-xl text-xs font-bold transition-all cursor-pointer ${mode === 'file' ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
                 >
                   <FileAudio className="w-4 h-4" />
-                  <span>File</span>
+                  <span>Media File</span>
                 </button>
                 <button
                   onClick={() => setMode('url')}
-                  className={`flex items-center space-x-2 py-2 px-6 rounded-lg text-sm font-bold transition-all ${mode === 'url' ? 'bg-white dark:bg-gray-700 text-brand-600 dark:text-brand-400 shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                  className={`flex items-center space-x-2 py-2 px-5 rounded-xl text-xs font-bold transition-all cursor-pointer ${mode === 'url' ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-brand-400 shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
                 >
                   <LinkIcon className="w-4 h-4" />
-                  <span>URL</span>
+                  <span>Web Link</span>
                 </button>
               </div>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-8">
               {mode === 'file' ? (
+                /* File Drop Zone */
                 <div
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -141,8 +148,10 @@ const UploadPanel = ({ onSubmit, isLoading }) => {
                   onClick={() => !isLoading && fileInputRef.current.click()}
                   className={`
                     relative cursor-pointer group
-                    border-4 rounded-3xl p-16 text-center transition-all duration-500
-                    ${dragOver ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-900/10 scale-[0.99]' : 'border-dashed border-gray-200 dark:border-gray-700 hover:border-brand-400 hover:bg-gray-50/50 dark:hover:bg-gray-800/50'}
+                    border-2 border-dashed rounded-3xl p-10 sm:p-14 text-center transition-all duration-300
+                    ${dragOver 
+                      ? 'border-brand-500 bg-brand-50/70 dark:bg-brand-950/40 scale-[0.99]' 
+                      : 'border-slate-200 dark:border-slate-800 hover:border-brand-400 dark:hover:border-brand-600 bg-slate-50/50 dark:bg-slate-950/40 hover:bg-brand-50/20 dark:hover:bg-brand-950/20'}
                     ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}
                   `}
                 >
@@ -156,33 +165,38 @@ const UploadPanel = ({ onSubmit, isLoading }) => {
                   />
                   
                   {!file ? (
-                    <div className="space-y-6">
-                      <div className="w-20 h-20 bg-brand-50 dark:bg-brand-900/30 text-brand-500 rounded-3xl flex items-center justify-center mx-auto group-hover:scale-110 group-hover:rotate-3 transition-transform duration-500">
-                        <Upload className="w-10 h-10" />
+                    <div className="space-y-5">
+                      <div className="w-16 h-16 bg-brand-100 dark:bg-brand-950/80 text-brand-600 dark:text-brand-400 rounded-2xl flex items-center justify-center mx-auto group-hover:scale-110 group-hover:rotate-3 transition-transform duration-300 border border-brand-200 dark:border-brand-800/60 shadow-inner">
+                        <Upload className="w-8 h-8" />
                       </div>
-                      <div className="space-y-2">
-                        <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">Drop your file here</p>
-                        <p className="text-gray-500 dark:text-gray-400">or click to browse your library</p>
+                      <div className="space-y-1">
+                        <p className="text-xl font-extrabold text-slate-800 dark:text-slate-200">
+                          Drop your lecture file here
+                        </p>
+                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                          or <span className="text-brand-600 dark:text-brand-400 font-bold underline">browse your device</span>
+                        </p>
                       </div>
-                      <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
-                        Supports MP3, WAV, MP4, M4A, FLAC
-                      </p>
+                      <div className="inline-flex items-center space-x-2 px-3 py-1 bg-slate-200/60 dark:bg-slate-800/60 rounded-full text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                        <span>MP3, WAV, MP4, M4A, OGG, FLAC, WEBM</span>
+                      </div>
                     </div>
                   ) : (
-                    <div className="max-w-md mx-auto bg-white dark:bg-gray-800 p-6 rounded-2xl border border-brand-100 dark:border-brand-900 shadow-xl shadow-brand-500/5 flex items-center justify-between animate-fade-in">
+                    /* Selected File Details Box */
+                    <div className="max-w-md mx-auto bg-white dark:bg-slate-800 p-5 rounded-2xl border border-brand-200 dark:border-brand-800 shadow-md flex items-center justify-between animate-fade-in">
                       <div className="flex items-center space-x-4 overflow-hidden">
-                        <div className="bg-brand-500 p-3 rounded-xl">
+                        <div className="bg-brand-600 p-2.5 rounded-xl shrink-0">
                           <CheckCircle className="w-6 h-6 text-white" />
                         </div>
                         <div className="text-left overflow-hidden">
-                          <p className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate">{file.name}</p>
-                          <p className="text-xs font-semibold text-brand-500 dark:text-brand-400 uppercase">{formatFileSize(file.size)}</p>
+                          <p className="text-sm font-extrabold text-slate-900 dark:text-white truncate">{file.name}</p>
+                          <p className="text-xs font-bold text-brand-600 dark:text-brand-400 uppercase">{formatFileSize(file.size)}</p>
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setFile(null); }}
-                        className="bg-gray-50 dark:bg-gray-700 p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all"
+                        className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-all cursor-pointer"
                         disabled={isLoading}
                       >
                         <X className="w-5 h-5" />
@@ -191,39 +205,41 @@ const UploadPanel = ({ onSubmit, isLoading }) => {
                   )}
                 </div>
               ) : (
-                <div className="space-y-6">
+                /* URL Input Field */
+                <div className="space-y-4">
                   <div className="relative group">
-                    <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
-                      <LinkIcon className="w-6 h-6 text-gray-400 group-focus-within:text-brand-500 transition-colors" />
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <LinkIcon className="w-5 h-5 text-slate-400 group-focus-within:text-brand-500 transition-colors" />
                     </div>
                     <input
                       type="text"
-                      placeholder="Paste YouTube or video link here..."
+                      placeholder="Paste YouTube or video link here (e.g. https://www.youtube.com/watch?v=...)"
                       value={url}
                       onChange={(e) => setUrl(e.target.value)}
                       disabled={isLoading}
-                      className="block w-full pl-14 pr-6 py-6 border-2 border-gray-100 dark:border-gray-800 rounded-2xl text-lg bg-gray-50 dark:bg-gray-800 placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 transition-all shadow-inner"
+                      className="block w-full pl-12 pr-4 py-4 border-2 border-slate-200 dark:border-slate-800 rounded-2xl text-base bg-slate-50 dark:bg-slate-950/60 placeholder-slate-400 dark:placeholder-slate-500 text-slate-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 transition-all shadow-inner"
                     />
                   </div>
-                  <div className="flex items-center space-x-3 text-sm text-gray-500 dark:text-gray-400 px-2">
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                    <span>Auto-detects timestamps and speakers</span>
+                  <div className="flex items-center space-x-2 text-xs font-medium text-slate-500 dark:text-slate-400 px-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-500" />
+                    <span>Auto-extracts audio &amp; generates speech-to-text transcript</span>
                   </div>
                 </div>
               )}
 
+              {/* Language Selector & Process Button Grid */}
               <div className="grid md:grid-cols-2 gap-6 items-end">
-                <div className="space-y-3">
-                  <label className="flex items-center space-x-2 text-sm font-bold text-gray-700 dark:text-gray-300 ml-1">
-                    <Globe className="w-4 h-4" />
-                    <span>Translate results to</span>
+                <div className="space-y-2">
+                  <label className="flex items-center space-x-2 text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300 ml-1">
+                    <Globe className="w-4 h-4 text-brand-500" />
+                    <span>Translate Notes &amp; Transcript To</span>
                   </label>
                   <div className="relative">
                     <select
                       value={selectedLanguage}
                       onChange={(e) => setSelectedLanguage(e.target.value)}
                       disabled={isLoading}
-                      className="w-full appearance-none p-5 bg-gray-50 dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-800 rounded-2xl text-gray-700 dark:text-gray-200 font-bold focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 outline-none transition-all disabled:opacity-50 pr-12"
+                      className="w-full appearance-none p-4 bg-slate-50 dark:bg-slate-950/60 border-2 border-slate-200 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-slate-100 font-bold focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 outline-none transition-all disabled:opacity-50 pr-12 cursor-pointer"
                     >
                       {SUPPORTED_LANGUAGES.map((lang) => (
                         <option key={lang.code} value={lang.code}>
@@ -231,8 +247,8 @@ const UploadPanel = ({ onSubmit, isLoading }) => {
                         </option>
                       ))}
                     </select>
-                    <div className="absolute inset-y-0 right-0 flex items-center pr-5 pointer-events-none">
-                      <ChevronDown className="w-5 h-5 text-gray-400" />
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
+                      <ChevronDown className="w-5 h-5 text-slate-400" />
                     </div>
                   </div>
                 </div>
@@ -241,22 +257,25 @@ const UploadPanel = ({ onSubmit, isLoading }) => {
                   type="submit"
                   disabled={(mode === 'file' ? !file : !url) || isLoading}
                   className={`
-                    w-full py-5 rounded-2xl font-extrabold text-lg text-white transition-all shadow-xl
+                    w-full py-4.5 rounded-2xl font-black text-base text-white transition-all shadow-lg cursor-pointer
                     ${(mode === 'file' ? !file : !url) || isLoading 
-                      ? 'bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed shadow-none' 
-                      : 'bg-brand-600 hover:bg-brand-700 hover:shadow-brand-500/20 hover:-translate-y-1 active:scale-95'}
+                      ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed shadow-none' 
+                      : 'bg-brand-600 hover:bg-brand-500 shadow-brand-500/20 hover:-translate-y-0.5 active:scale-95'}
                   `}
                 >
                   {isLoading ? (
                     <span className="flex items-center justify-center">
-                      <svg className="animate-spin h-6 w-6 mr-3 text-white" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      <svg className="animate-spin h-5 w-5 mr-3 text-white" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                      Analysing Lecture...
+                      Analyzing Lecture...
                     </span>
                   ) : (
-                    'Process with AI'
+                    <span className="flex items-center justify-center space-x-2">
+                      <Sparkles className="w-5 h-5" />
+                      <span>Process with AI</span>
+                    </span>
                   )}
                 </button>
               </div>
@@ -267,18 +286,18 @@ const UploadPanel = ({ onSubmit, isLoading }) => {
         )}
       </div>
       
-      {/* Bottom Features Info */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
+      {/* Feature Value Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {[
-          { icon: <CheckCircle className="text-brand-500" />, title: "Summarization", desc: "Get concise bullet points" },
-          { icon: <Globe className="text-brand-500" />, title: "Translation", desc: "Support for 10+ languages" },
-          { icon: <Mic className="text-brand-500" />, title: "Key Concepts", desc: "Automated keyword extraction" }
+          { icon: <FileText className="w-5 h-5 text-brand-500" />, title: "Abstractive Summaries", desc: "Key takeaways & bullet-point lecture notes" },
+          { icon: <Globe className="w-5 h-5 text-indigo-500" />, title: "11 Regional Languages", desc: "Automatic translations for Indian languages" },
+          { icon: <HelpCircle className="w-5 h-5 text-emerald-500" />, title: "Exam Quiz Generation", desc: "AI-generated MCQs & flashcards" }
         ].map((feat, i) => (
-          <div key={i} className="bg-white dark:bg-gray-900 p-6 rounded-3xl border border-gray-100 dark:border-gray-800 flex items-center space-x-4 shadow-sm">
-            <div className="bg-brand-50 dark:bg-brand-900/30 p-3 rounded-xl">{feat.icon}</div>
+          <div key={i} className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 flex items-center space-x-4 shadow-sm">
+            <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-xl shrink-0">{feat.icon}</div>
             <div>
-              <h4 className="font-bold text-gray-900 dark:text-white">{feat.title}</h4>
-              <p className="text-sm text-gray-500 dark:text-gray-400">{feat.desc}</p>
+              <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">{feat.title}</h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{feat.desc}</p>
             </div>
           </div>
         ))}
@@ -288,3 +307,4 @@ const UploadPanel = ({ onSubmit, isLoading }) => {
 };
 
 export default UploadPanel;
+

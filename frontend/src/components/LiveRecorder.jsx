@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Square, Play, Pause, RotateCcw, AlertCircle, Headphones } from 'lucide-react';
+import { Square, Play, Pause, RotateCcw, AlertCircle, Headphones, Mic } from 'lucide-react';
 
 const SUPPORTED_LANGUAGES = [
   { code: 'en', name: 'English' },
@@ -35,6 +35,8 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
+  const startTimeRef = useRef(null);
+  const accumulatedTimeRef = useRef(0);
   const canvasRef = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
@@ -47,10 +49,27 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
     }
   };
 
+  const stopTimer = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const startTimer = () => {
+    stopTimer();
+    timerRef.current = setInterval(() => {
+      if (startTimeRef.current) {
+        const totalMs = accumulatedTimeRef.current + (Date.now() - startTimeRef.current);
+        setDuration(Math.floor(totalMs / 1000));
+      }
+    }, 200);
+  };
+
   useEffect(() => {
     return () => {
       stopTracks();
-      if (timerRef.current) clearInterval(timerRef.current);
+      stopTimer();
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       if (audioURL) URL.revokeObjectURL(audioURL);
       if (audioContextRef.current) audioContextRef.current.close();
@@ -70,19 +89,6 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
     };
   }, [recorderState]);
 
-  const startTimer = () => {
-    timerRef.current = setInterval(() => {
-      setDuration(prev => prev + 1);
-    }, 1000);
-  };
-
-  const stopTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  };
-
   const startRecording = async () => {
     if (!supportedMimeType) {
       setError('Recording not supported in this browser.');
@@ -96,6 +102,7 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
     }
     setError(null);
     setDuration(0);
+    accumulatedTimeRef.current = 0;
     setRecorderState('requesting');
     audioChunksRef.current = [];
 
@@ -128,6 +135,7 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
       analyserRef.current = analyser;
 
       mediaRecorder.start(1000);
+      startTimeRef.current = Date.now();
       startTimer();
       setRecorderState('recording');
     } catch {
@@ -263,6 +271,10 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
   const pauseRecording = () => {
     if (mediaRecorderRef.current?.state === 'recording') {
       mediaRecorderRef.current.pause();
+      if (startTimeRef.current) {
+        accumulatedTimeRef.current += Date.now() - startTimeRef.current;
+        startTimeRef.current = null;
+      }
       stopTimer();
       setRecorderState('paused');
     }
@@ -271,6 +283,7 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
   const resumeRecording = () => {
     if (mediaRecorderRef.current?.state === 'paused') {
       mediaRecorderRef.current.resume();
+      startTimeRef.current = Date.now();
       startTimer();
       setRecorderState('recording');
     }
@@ -278,15 +291,25 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
 
   const stopRecording = () => {
     if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
+      if (mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
       stopTracks();
       stopTimer();
+      
+      if (startTimeRef.current) {
+        accumulatedTimeRef.current += Date.now() - startTimeRef.current;
+        startTimeRef.current = null;
+      }
+      const finalSecs = Math.floor(accumulatedTimeRef.current / 1000);
+      setDuration(finalSecs);
+
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
       }
       if (audioContextRef.current) {
-        audioContextRef.current.close();
+        audioContextRef.current.close().catch(() => {});
         audioContextRef.current = null;
         analyserRef.current = null;
       }
@@ -295,7 +318,11 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
   };
 
   const resetRecording = () => {
+    stopTimer();
+    stopTracks();
     if (audioURL) URL.revokeObjectURL(audioURL);
+    startTimeRef.current = null;
+    accumulatedTimeRef.current = 0;
     setRecorderState('idle');
     setDuration(0);
     setAudioBlob(null);
@@ -317,10 +344,10 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
   };
 
   return (
-    <div className="p-10 md:p-12">
-      <div className="text-center max-w-xl mx-auto space-y-4 mb-12">
-        <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">Live Recording</h2>
-        <p className="text-gray-500 dark:text-gray-400">Record your lecture in real-time. Our AI will handle the transcription and analysis.</p>
+    <div className="p-8 sm:p-10">
+      <div className="text-center max-w-xl mx-auto space-y-2 mb-8">
+        <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-heading">Live Lecture Recorder</h2>
+        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Record live classroom lectures directly from your microphone.</p>
       </div>
 
       <AnimatePresence mode="wait">
@@ -329,25 +356,31 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="flex flex-col items-center space-y-10 py-10"
+            className="flex flex-col items-center space-y-8 py-6"
           >
-            <div className="relative group">
-              <div className="absolute inset-0 bg-red-500 rounded-full blur-2xl opacity-20 group-hover:opacity-40 transition-opacity duration-500 animate-pulse" />
+            <div className="relative group cursor-pointer" onClick={startRecording}>
+              <div className="absolute inset-0 bg-red-500 rounded-full blur-2xl opacity-30 group-hover:opacity-60 transition-opacity duration-500 animate-pulse" />
               <button
+                type="button"
                 onClick={startRecording}
                 disabled={isLoading}
-                className="relative w-32 h-32 bg-red-600 rounded-full flex items-center justify-center shadow-2xl hover:bg-red-700 transition-all active:scale-90 group"
+                className="relative w-28 h-28 bg-gradient-to-br from-red-500 to-red-700 rounded-full flex items-center justify-center shadow-2xl hover:scale-105 transition-all active:scale-95 cursor-pointer group"
+                aria-label="Start Recording"
               >
-                <div className="w-10 h-10 bg-white rounded-lg group-hover:scale-110 transition-transform" />
+                <Mic className="w-12 h-12 text-white group-hover:scale-110 transition-transform" />
               </button>
             </div>
             
-            <div className="w-full max-w-xs space-y-3">
-              <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest text-center">Translation Language</label>
+            <p className="text-xs font-extrabold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+              Click Mic to Start Live Recording
+            </p>
+
+            <div className="w-full max-w-xs space-y-2 pt-2">
+              <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-center">Translate To</label>
               <select
                 value={selectedLanguage}
                 onChange={(e) => setSelectedLanguage(e.target.value)}
-                className="w-full p-4 bg-gray-50 dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-2xl text-gray-700 dark:text-gray-200 font-bold focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 outline-none transition-all"
+                className="w-full p-3.5 bg-slate-50 dark:bg-slate-950/60 border-2 border-slate-200 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-slate-100 font-bold focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500 outline-none transition-all cursor-pointer text-sm"
               >
                 {SUPPORTED_LANGUAGES.map((lang) => (
                   <option key={lang.code} value={lang.code}>{lang.name}</option>
@@ -361,55 +394,59 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="space-y-12"
+            className="space-y-8"
           >
-            <div className="flex flex-col items-center space-y-4">
-              <div className="flex items-center space-x-3 px-6 py-2 bg-red-50 dark:bg-red-950/20 rounded-full border border-red-100 dark:border-red-900/50">
+            <div className="flex flex-col items-center space-y-3">
+              <div className="flex items-center space-x-2.5 px-5 py-2 bg-red-50 dark:bg-red-950/40 rounded-full border border-red-200 dark:border-red-900/60">
                 <div className={`w-2.5 h-2.5 bg-red-600 rounded-full ${recorderState === 'recording' ? 'animate-pulse' : ''}`} />
-                <span className="text-red-600 dark:text-red-400 font-black tracking-widest uppercase text-xs">
-                  {recorderState === 'recording' ? 'Live Recording' : 'Paused'}
+                <span className="text-red-700 dark:text-red-400 font-extrabold tracking-widest uppercase text-xs">
+                  {recorderState === 'recording' ? 'Live Recording Active' : 'Recording Paused'}
                 </span>
               </div>
-              <span className="text-6xl font-black text-gray-900 dark:text-white font-mono tracking-tighter">
+              <span className="text-5xl font-black text-slate-900 dark:text-white font-mono tracking-tight">
                 {formatTime(duration)}
               </span>
             </div>
 
-            <div className="relative overflow-hidden bg-linear-to-br from-gray-950 to-gray-900 p-8 rounded-4xl shadow-2xl border-2 border-gray-800/80 shadow-brand-500/10">
-              {/* Decorative ambient glowing circles */}
+            <div className="relative overflow-hidden bg-slate-950 p-6 rounded-3xl shadow-2xl border border-slate-800">
               <div className="absolute -top-24 -left-24 w-48 h-48 bg-brand-500/10 rounded-full blur-3xl" />
               <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl" />
               
-              <canvas ref={canvasRef} width="800" height="120" className="w-full h-32 relative z-10" />
+              <canvas ref={canvasRef} width="800" height="120" className="w-full h-28 relative z-10" />
               
-              {/* Oscilloscope watermark */}
-              <div className="absolute bottom-3 right-5 text-[9px] font-mono font-bold tracking-widest text-gray-700 select-none z-20">
-                LECTA AUDIO CORE v1.0
+              <div className="absolute bottom-2 right-4 text-[10px] font-mono font-bold tracking-widest text-slate-600 select-none z-20">
+                AUDIO CORE v2.0
               </div>
             </div>
 
-            <div className="flex justify-center items-center gap-6">
+            <div className="flex justify-center items-center gap-5">
               {recorderState === 'recording' ? (
                 <button
+                  type="button"
                   onClick={pauseRecording}
-                  className="w-16 h-16 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-2xl flex items-center justify-center text-gray-600 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 hover:border-brand-200 dark:hover:border-brand-800 transition-all shadow-sm"
+                  className="w-14 h-14 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-2xl flex items-center justify-center text-slate-700 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400 transition-all shadow-sm cursor-pointer"
+                  title="Pause Recording"
                 >
                   <Pause className="w-6 h-6" />
                 </button>
               ) : (
                 <button
+                  type="button"
                   onClick={resumeRecording}
-                  className="w-16 h-16 bg-brand-600 rounded-2xl flex items-center justify-center text-white hover:bg-brand-700 transition-all shadow-lg"
+                  className="w-14 h-14 bg-brand-600 rounded-2xl flex items-center justify-center text-white hover:bg-brand-500 transition-all shadow-md cursor-pointer"
+                  title="Resume Recording"
                 >
                   <Play className="w-6 h-6 fill-current" />
                 </button>
               )}
               
               <button
+                type="button"
                 onClick={stopRecording}
-                className="w-20 h-20 bg-gray-900 dark:bg-gray-800 rounded-3xl flex items-center justify-center text-white hover:bg-black transition-all shadow-xl"
+                className="w-16 h-16 bg-red-600 hover:bg-red-700 rounded-2xl flex items-center justify-center text-white transition-all shadow-lg active:scale-95 cursor-pointer"
+                title="Stop Recording"
               >
-                <Square className="w-8 h-8 fill-current" />
+                <Square className="w-7 h-7 fill-current" />
               </button>
             </div>
           </motion.div>
@@ -417,34 +454,37 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
 
         {recorderState === 'stopped' && (
           <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="space-y-8 py-6"
+            className="space-y-6 py-4"
           >
-            <div className="bg-emerald-50 dark:bg-emerald-950/20 p-8 rounded-4xl border border-emerald-100 dark:border-emerald-900/50 flex flex-col items-center text-center space-y-4">
-              <div className="bg-white dark:bg-gray-800 p-4 rounded-3xl shadow-sm">
-                <Headphones className="w-10 h-10 text-emerald-500" />
+            <div className="bg-emerald-50/80 dark:bg-emerald-950/30 p-6 sm:p-8 rounded-3xl border border-emerald-200 dark:border-emerald-900/60 flex flex-col items-center text-center space-y-4">
+              <div className="bg-white dark:bg-slate-800 p-3.5 rounded-2xl shadow-sm border border-emerald-100 dark:border-emerald-900">
+                <Headphones className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div>
-                <h3 className="text-2xl font-black text-emerald-900 dark:text-white">Recording Captured</h3>
-                <p className="text-emerald-700 dark:text-emerald-400 font-medium">{formatTime(duration)} total duration</p>
+                <h3 className="text-xl font-black text-emerald-900 dark:text-emerald-100">Recording Captured Successfully</h3>
+                <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">{formatTime(duration)} duration</p>
               </div>
-              <audio controls src={audioURL} className="w-full max-w-md mt-4 dark:invert dark:hue-rotate-180" />
+              <audio controls src={audioURL} className="w-full max-w-md mt-2 dark:invert dark:hue-rotate-180" />
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4">
               <button
+                type="button"
                 onClick={submitRecording}
                 disabled={isLoading}
-                className="grow py-5 bg-brand-600 text-white rounded-2xl font-black text-lg hover:bg-brand-700 transition-all shadow-xl active:scale-95 disabled:opacity-50"
+                className="grow py-4 bg-brand-600 hover:bg-brand-500 text-white rounded-2xl font-black text-base transition-all shadow-lg active:scale-95 cursor-pointer disabled:opacity-50"
               >
-                {isLoading ? 'Analysing...' : 'Submit to AI'}
+                {isLoading ? 'Analyzing Recording...' : 'Submit to AI Workspace'}
               </button>
               <button
+                type="button"
                 onClick={resetRecording}
-                className="px-8 py-5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-2xl font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
+                className="px-6 py-4 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-2xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer"
+                title="Record Again"
               >
-                <RotateCcw className="w-6 h-6" />
+                <RotateCcw className="w-5 h-5" />
               </button>
             </div>
           </motion.div>
@@ -452,9 +492,9 @@ const LiveRecorder = ({ onSubmit, isLoading }) => {
       </AnimatePresence>
 
       {error && (
-        <div className="mt-8 bg-red-50 dark:bg-red-950/20 p-4 rounded-xl border border-red-100 dark:border-red-900/50 flex items-center space-x-3 text-red-700 dark:text-red-400">
-          <AlertCircle className="w-5 h-5" />
-          <p className="font-bold text-sm">{error}</p>
+        <div className="mt-6 bg-red-50 dark:bg-red-950/30 p-4 rounded-2xl border border-red-200 dark:border-red-900/60 flex items-center space-x-3 text-red-700 dark:text-red-400 text-sm">
+          <AlertCircle className="w-5 h-5 shrink-0" />
+          <p className="font-bold">{error}</p>
         </div>
       )}
     </div>
