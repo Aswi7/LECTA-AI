@@ -20,15 +20,43 @@ except OSError:
     nlp = spacy.load("en_core_web_sm")
 
 META_FILLER_PATTERNS = [
-    r"\bwelcome\b", r"\bsubscribe\b", r"\bchannel\b", r"\bvideo\b", r"\blecture\b",
+    r"\bwelcome\b", r"\bsubscribe\b", r"\bchannel\b", r"\bvideo\b", r"\bvideos\b", r"\blecture\b",
     r"\btoday's\b", r"\bin this video\b", r"\bin this lecture\b", r"\blet's get started\b",
     r"\bthanks for watching\b", r"\blike and subscribe\b", r"\bhope you\b", r"\bdon't forget\b",
     r"\bhello everyone\b", r"\bhi guys\b", r"\bsee you\b", r"\bcomment below\b",
     r"\bmoving on to\b", r"\bnext topic\b", r"\bpresentation\b", r"\bslide\b",
     r"\bas i said\b", r"\bas we discussed\b", r"\bin the previous\b", r"\bwelcome back\b",
     r"\bmy name is\b", r"\btoday we are\b", r"\btoday we will\b", r"\bcheck out\b",
-    r"\bmake sure to\b", r"\bin this tutorial\b"
+    r"\bmake sure to\b", r"\bin this tutorial\b", r"\bwebsite\b", r"\bsign up\b",
+    r"\bclick here\b", r"\bplaylist\b", r"\byoutube\b", r"\bflashcard\b", r"\bflashcards\b",
+    r"\bexam style\b", r"\bpast papers\b", r"\bpass papers\b", r"\bcognito\b",
+    r"\bpatreon\b", r"\blink in the description\b", r"\bsocial media\b",
+    r"\bif you haven't heard\b", r"\bfind all of our\b", r"\bbrowse our\b"
 ]
+
+CONVERSATIONAL_PREFIXES = [
+    r"^(because\s+we\s+can\s+see\s+that\s+)",
+    r"^(as\s+we\s+can\s+see\s+that\s+)",
+    r"^(for\s+example\s*,?\s*)",
+    r"^(for\s+instance\s*,?\s*)",
+    r"^(so\s+if\s+you\s+)",
+    r"^(so\s+as\s+you\s+can\s+see\s*,?\s*)",
+    r"^(so\s*,?\s*)",
+    r"^(now\s*,?\s*)",
+    r"^(basically\s*,?\s*)",
+    r"^(remember\s+that\s*)",
+    r"^(in\s+other\s+words\s*,?\s*)",
+    r"^(as\s+you\s+know\s*,?\s*)"
+]
+
+def clean_sentence_for_questions(sent: str) -> str:
+    """Strips conversational leading phrases from a sentence."""
+    text = sent.strip()
+    for prefix_pat in CONVERSATIONAL_PREFIXES:
+        text = re.sub(prefix_pat, "", text, flags=re.IGNORECASE).strip()
+    if text and text[0].islower():
+        text = text[0].upper() + text[1:]
+    return text
 
 def is_meta_or_filler_sentence(sent: str) -> bool:
     """Checks if a sentence is meta-commentary, video intro/outro, or conversational filler."""
@@ -39,11 +67,15 @@ def is_meta_or_filler_sentence(sent: str) -> bool:
     return False
 
 def is_valid_subject(subject: str) -> bool:
-    """Validates if a subject noun chunk is suitable for a definition question."""
+    """Validates if a subject noun chunk is suitable for an academic definition question."""
     low = subject.lower().strip()
     if not low or len(low) < 3:
         return False
-    bad_words = {"this", "that", "it", "they", "we", "he", "she", "here", "there", "what", "which", "video", "topic", "lecture", "today", "channel"}
+    bad_words = {
+        "this", "that", "it", "they", "we", "he", "she", "here", "there", "what", "which",
+        "video", "videos", "topic", "lecture", "today", "channel", "website", "playlist",
+        "questions", "flashcards", "papers", "example", "thing", "someone", "anyone"
+    }
     if low in bad_words or any(bw in low.split() for bw in bad_words):
         return False
     return True
@@ -75,11 +107,12 @@ def generate_definition_questions(sentences: List[str]) -> List[Dict[str, Any]]:
     """
     patterns = [
         "is defined as", "refers to", "is known as", 
-        "means that", "can be defined as", "is a type of"
+        "means that", "can be defined as", "is a type of", "is responsible for", "is composed of"
     ]
     questions = []
     
-    for sent in sentences:
+    for raw_sent in sentences:
+        sent = clean_sentence_for_questions(raw_sent)
         if is_meta_or_filler_sentence(sent):
             continue
         lowercased = sent.lower()
@@ -114,9 +147,13 @@ def generate_fill_in_blank(sentences: List[str], keywords: List[Dict[str, Any]])
     questions = []
     keyword_list = [kw["keyword"] for kw in keywords]
     
-    for sent in sentences:
+    for raw_sent in sentences:
+        sent = clean_sentence_for_questions(raw_sent)
         if is_meta_or_filler_sentence(sent):
             continue
+        if sent.lower().startswith(("what", "how", "why", "can you", "let's", "question", "for example")):
+            continue
+
         for kw in keyword_list:
             if not kw or len(kw.strip()) < 3:
                 continue
@@ -144,9 +181,13 @@ def generate_true_false(sentences: List[str]) -> List[Dict[str, Any]]:
     """
     questions = []
     
-    for sent in sentences:
+    for raw_sent in sentences:
+        sent = clean_sentence_for_questions(raw_sent)
         if is_meta_or_filler_sentence(sent):
             continue
+        if sent.lower().startswith(("what", "how", "why", "for example", "so", "if you", "you'll")):
+            continue
+
         doc = nlp(sent)
         word_count = len([t for t in doc if not t.is_punct])
         
