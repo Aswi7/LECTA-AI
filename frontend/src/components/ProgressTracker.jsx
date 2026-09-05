@@ -22,7 +22,7 @@ const ProgressTracker = () => {
       {/* Main Title & Subtitle */}
       <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white mb-2 font-heading">Analyzing Your Lecture</h2>
       <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-10 font-normal leading-relaxed">
-        Our AI pipeline is extracting concepts, building your summary, translating notes, and preparing practice quizzes. This typically takes 15–30 seconds.
+        Our AI pipeline is building your summary, translating notes, and preparing practice quizzes. This typically takes 15–30 seconds.
       </p>
 
       {/* Step Cards Grid */}

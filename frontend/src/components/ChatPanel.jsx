@@ -11,20 +11,34 @@ const ChatPanel = ({ sessionId, isIndexed: isIndexedProp }) => {
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // Check indexing status on mount
+  // Check indexing status on mount with polling fallback
   useEffect(() => {
+    let intervalId = null;
+
     const checkStatus = async () => {
       try {
         const res = await fetch(`http://localhost:5000/api/chat/${sessionId}/status`);
         if (res.ok) {
           const data = await res.json();
-          setIsIndexed(data.indexed);
+          if (data.indexed) {
+            setIsIndexed(true);
+            if (intervalId) clearInterval(intervalId);
+          } else {
+            // Trigger auto-reindex if not indexed
+            await fetch(`http://localhost:5000/api/reindex/${sessionId}`, { method: 'POST' });
+          }
         }
       } catch (err) {
         console.error("Failed to check status", err);
       }
     };
+
     checkStatus();
+    intervalId = setInterval(checkStatus, 2500);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [sessionId]);
 
   // Scroll to bottom on messages/loading change

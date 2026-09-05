@@ -16,8 +16,9 @@ from config import CONFIG
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Module-level cached client
+# Module-level cached client and in-memory cache fallback
 _client = None
+IN_MEMORY_SESSIONS = {}
 
 def get_collection():
     """
@@ -42,10 +43,11 @@ def get_collection():
         return None
 
 def save_result(session_id: str, result: dict) -> bool:
-    """Upserts document keyed by session_id."""
+    """Upserts document keyed by session_id in MongoDB and in-memory cache."""
+    IN_MEMORY_SESSIONS[session_id] = result
     collection = get_collection()
     if collection is None:
-        return False
+        return True
     
     try:
         now = datetime.now(UTC).isoformat()
@@ -63,20 +65,20 @@ def save_result(session_id: str, result: dict) -> bool:
         return True
     except Exception as e:
         logger.error(f"Failed to save result for {session_id}: {e}")
-        return False
+        return True
 
 def get_result(session_id: str) -> dict | None:
-    """Finds one document by session_id and removes _id."""
+    """Finds one document by session_id, fallback to in-memory cache."""
     collection = get_collection()
-    if collection is None:
-        return None
+    if collection is not None:
+        try:
+            doc = collection.find_one({"session_id": session_id}, {"_id": 0})
+            if doc:
+                return doc
+        except Exception as e:
+            logger.error(f"Failed to retrieve result from MongoDB for {session_id}: {e}")
     
-    try:
-        doc = collection.find_one({"session_id": session_id}, {"_id": 0})
-        return doc
-    except Exception as e:
-        logger.error(f"Failed to retrieve result for {session_id}: {e}")
-        return None
+    return IN_MEMORY_SESSIONS.get(session_id)
 
 def get_all_results(limit: int = 10) -> list[dict]:
     """Returns the most recent limit sessions with specific fields."""

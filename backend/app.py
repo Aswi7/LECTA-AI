@@ -113,7 +113,7 @@ def download_audio_from_url(url, session_id):
             return os.path.join(CONFIG.UPLOAD_FOLDER, filename), info.get('title', 'Downloaded Video')
 
 def run_ai_modules(cleaned_text, sentences, target_language):
-    """Runs the 4 AI modules in parallel."""
+    """Runs the AI modules with ThreadPoolExecutor."""
     with ThreadPoolExecutor(max_workers=4) as executor:
         # Task 1: Summarization
         fut_summary = executor.submit(lambda: {
@@ -124,23 +124,27 @@ def run_ai_modules(cleaned_text, sentences, target_language):
         # Task 2: Keyword Extraction
         fut_concepts = executor.submit(get_key_concepts, cleaned_text)
         
-        # Task 3: Translation
+        # Get summary first so translation operates on the summary text
+        summary_result = fut_summary.result()
+        summary_text = summary_result["summary"] if summary_result.get("summary") else cleaned_text
+
+        # Task 3: Translation (using the lecture summary)
         fut_translation = executor.submit(lambda: {
-            "translated_text": translate_text(cleaned_text, target_language) if target_language != "en" else cleaned_text,
+            "translated_text": translate_text(summary_text, target_language) if target_language != "en" else summary_text,
         })
         
-        # Get concepts first because questions and keyword translation depend on it
+        # Get concepts next because questions and keyword translation depend on it
         concepts = fut_concepts.result()
         
         # Task 4: Question Generation (depends on concepts)
         fut_questions = executor.submit(generate_questions, sentences, concepts.get("keywords", []))
         
-        # Additional Translation Task (Keywords) - could be part of Task 3
+        # Additional Translation Task (Keywords)
         fut_trans_kws = executor.submit(translate_keywords, concepts.get("keywords", []), target_language)
 
         results = {
-            "summary": fut_summary.result()["summary"],
-            "bullet_notes": fut_summary.result()["bullet_notes"],
+            "summary": summary_result["summary"],
+            "bullet_notes": summary_result["bullet_notes"],
             "concepts": concepts,
             "translated_content": fut_translation.result()["translated_text"],
             "questions": fut_questions.result(),
@@ -500,6 +504,28 @@ def get_results_api():
 def get_result_by_id_api(session_id):
     result = get_result(session_id)
     if result:
+        # Self-healing check for legacy Error 500 strings from prior GoogleTranslator failures
+        trans_content = str(result.get("translated_content", ""))
+        trans_kws = result.get("translated_keywords", [])
+        has_error_kw = any(str(kw.get("translated", "")).startswith("Error 500") for kw in trans_kws if isinstance(kw, dict))
+        
+        if trans_content.startswith("Error 500") or "Server Error" in trans_content or has_error_kw:
+            target_lang = result.get("target_language", "ta")
+            summary_text = result.get("summary") or result.get("cleaned_text", "")
+            
+            if summary_text and (trans_content.startswith("Error 500") or "Server Error" in trans_content):
+                new_trans = translate_text(summary_text, target_lang)
+                if new_trans and not str(new_trans).startswith("Error 500"):
+                    result["translated_content"] = new_trans
+            
+            raw_kws = result.get("concepts", {}).get("keywords", [])
+            if raw_kws and has_error_kw:
+                new_kws = translate_keywords(raw_kws, target_lang)
+                if new_kws:
+                    result["translated_keywords"] = new_kws
+            
+            save_result(session_id, result)
+
         return jsonify(result), 200
     return jsonify({"error": "Session not found", "session_id": session_id}), 404
 
@@ -600,6 +626,23 @@ def chat_with_lecture(session_id):
     
     history = data.get('history', [])
     
+    # Ensure collection exists; auto-index if missing
+    try:
+        from modules.rag_chat import get_chroma_client, index_session
+        client = get_chroma_client()
+        try:
+            client.get_collection(f"session_{session_id}")
+        except Exception:
+            transcript = session_data.get('transcript') or session_data.get('cleaned_text') or ""
+            if transcript:
+                index_session(
+                    session_id=session_id,
+                    transcript=transcript,
+                    metadata={"filename": session_data.get('filename', 'Session')}
+                )
+    except Exception as e:
+        logger.warning(f"Auto-indexing check warning for {session_id}: {e}")
+
     try:
         result = answer_question(
           session_id, question, history)
@@ -613,13 +656,35 @@ def chat_with_lecture(session_id):
 @app.route('/api/chat/<session_id>/status', methods=['GET'])
 def chat_status(session_id):
     try:
-        from modules.rag_chat import get_chroma_client, CHROMA_PATH
+        from modules.rag_chat import get_chroma_client, index_session
         client = get_chroma_client()
-        collection = client.get_collection(f"session_{session_id}")
-        count = collection.count()
+        try:
+            collection = client.get_collection(f"session_{session_id}")
+            count = collection.count()
+            if count > 0:
+                return jsonify({
+                    "indexed": True,
+                    "chunk_count": count,
+                    "session_id": session_id
+                }), 200
+        except Exception:
+            pass
+
+        # Try on-the-fly auto-indexing if missing
+        session_data = get_result(session_id)
+        if session_data:
+            transcript = session_data.get('transcript') or session_data.get('cleaned_text') or ""
+            if transcript and index_session(session_id=session_id, transcript=transcript, metadata={"filename": session_data.get('filename', 'Session')}):
+                collection = client.get_collection(f"session_{session_id}")
+                return jsonify({
+                    "indexed": True,
+                    "chunk_count": collection.count(),
+                    "session_id": session_id
+                }), 200
+
         return jsonify({
-            "indexed": True,
-            "chunk_count": count,
+            "indexed": False,
+            "chunk_count": 0,
             "session_id": session_id
         }), 200
     except Exception:

@@ -331,40 +331,7 @@ def export_as_pdf(session_data: Dict[str, Any], output_path: str) -> str:
         story.append(Paragraph("Not available", body_style))
     story.append(Spacer(1, 12))
     
-    # Section: Keywords
-    story.append(create_section_header("Keywords"))
-    story.append(Spacer(1, 8))
-    keywords = session_data.get('concepts', {}).get('keywords', [])
-    if keywords:
-        kw_data = []
-        
-        # Chunk keywords in groups of 4 to show 4 columns
-        for i in range(0, len(keywords), 4):
-            row = []
-            for j in range(4):
-                if i + j < len(keywords):
-                    row.append(keywords[i + j]['keyword'])
-                else:
-                    row.append("")
-            kw_data.append(row)
-            
-        col_w = doc.width / 4.0
-        kw_table = Table(kw_data, colWidths=[col_w] * 4)
-        kw_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-            ('TOPPADDING', (0, 0), (-1, -1), 5),
-            ('LEFTPADDING', (0, 0), (-1, -1), 8),
-        ]))
-        for idx in range(len(kw_data)):
-            bg = '#F8FAFC' if idx % 2 == 1 else '#FFFFFF'
-            kw_table.setStyle(TableStyle([('BACKGROUND', (0, idx), (-1, idx), HexColor(bg))]))
-            
-        story.append(kw_table)
-    else:
-        story.append(Paragraph("Not available", body_style))
-    story.append(Spacer(1, 15))
+
     
     # Section: Translation
     story.append(create_section_header(f"Translation ({target_lang})"))
@@ -458,36 +425,7 @@ def export_as_pdf(session_data: Dict[str, Any], output_path: str) -> str:
             story.append(Paragraph("Not available", body_style))
         story.append(Spacer(1, 12))
         
-        # Keywords
-        story.append(create_section_header("Keywords"))
-        story.append(Spacer(1, 8))
-        keywords = session_data.get('concepts', {}).get('keywords', [])
-        if keywords:
-            kw_data = []
-            for i in range(0, len(keywords), 4):
-                row = []
-                for j in range(4):
-                    if i + j < len(keywords):
-                        row.append(sanitize(keywords[i + j]['keyword']))
-                    else:
-                        row.append("")
-                kw_data.append(row)
-            col_w = doc.width / 4.0
-            kw_table = Table(kw_data, colWidths=[col_w] * 4)
-            kw_table.setStyle(TableStyle([
-                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-                ('TOPPADDING', (0, 0), (-1, -1), 5),
-                ('LEFTPADDING', (0, 0), (-1, -1), 8),
-            ]))
-            for idx in range(len(kw_data)):
-                bg = '#F8FAFC' if idx % 2 == 1 else '#FFFFFF'
-                kw_table.setStyle(TableStyle([('BACKGROUND', (0, idx), (-1, idx), HexColor(bg))]))
-            story.append(kw_table)
-        else:
-            story.append(Paragraph("Not available", body_style))
-        story.append(Spacer(1, 15))
+
         
         # Translation
         story.append(create_section_header(f"Translation ({sanitized_target})"))
@@ -686,20 +624,7 @@ def export_as_docx(session_data: Dict[str, Any], output_path: str) -> str:
     else:
         doc.add_paragraph("Not available")
         
-    # Keywords
-    add_custom_heading("Keywords", level=1)
-    keywords = session_data.get('concepts', {}).get('keywords', [])
-    if keywords:
-        p = doc.add_paragraph()
-        kw_text = ", ".join([kw['keyword'] for kw in keywords])
-        run = p.add_run(kw_text)
-        run.font.size = Pt(10.5)
-        p.paragraph_format.space_after = Pt(12)
-    else:
-        doc.add_paragraph("Not available")
-        
-    # Spacer
-    doc.add_paragraph()
+
         
     # Translation
     add_custom_heading(f"Translation ({target_lang})", level=1)
@@ -757,14 +682,7 @@ def export_as_txt(session_data: Dict[str, Any], output_path: str) -> str:
             f.write("Not available\n")
         f.write("\n")
         
-        f.write("=== KEYWORDS ===\n")
-        keywords = session_data.get('concepts', {}).get('keywords', [])
-        if keywords:
-            kw_text = ", ".join([kw['keyword'] for kw in keywords])
-            f.write(kw_text + "\n")
-        else:
-            f.write("Not available\n")
-        f.write("\n")
+
         
         f.write("=== TRANSLATION ===\n")
         f.write((session_data.get('translated_content') or "Not available") + "\n\n")

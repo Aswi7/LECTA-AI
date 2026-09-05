@@ -104,6 +104,11 @@ def chunk_transcript(text: str, chunk_size: int = 1000, overlap: int = 150) -> l
         chunk_str = "".join(current_sentences)
         if len(chunk_str) >= 100:
             chunks.append(chunk_str)
+        elif not chunks:
+            chunks.append(chunk_str)
+
+    if not chunks and text.strip():
+        chunks.append(text.strip())
 
     return chunks
 
@@ -120,18 +125,16 @@ def index_session(session_id: str, transcript: str, metadata: dict) -> bool:
         bool: True on success, False on exception.
     """
     logger.info(f"Starting RAG indexing for session {session_id}, transcript length: {len(transcript) if transcript else 0} characters")
-    if not transcript or len(transcript.strip()) < 50:
+    if not transcript or len(transcript.strip()) < 10:
         logger.warning(f"Transcript too short to index for session {session_id}: {len(transcript) if transcript else 0} characters")
         return False
 
     try:
         chunks = chunk_transcript(transcript)
+        if not chunks and transcript.strip():
+            chunks = [transcript.strip()]
         if not chunks:
-            logger.error(f"No chunks generated for session {session_id}. Transcript may be too short.")
-            return False
-            
-        if len(chunks) == 0:
-            logger.error("Empty chunks list — cannot add to ChromaDB")
+            logger.error(f"No chunks generated for session {session_id}.")
             return False
 
         collection_name = f"session_{session_id}"
@@ -350,11 +353,18 @@ def answer_question(session_id: str, question: str, chat_history: list[dict]) ->
             "provider": used_provider
         }
 
+    # Extractive fallback: answer directly using top relevant transcript chunks
+    top_passages = "\n\n".join([f"• {chunk['text'].strip()}" for chunk in retrieved_chunks[:3]])
+    fallback_answer = (
+        f"Based on your lecture transcript:\n\n{top_passages}"
+    )
+
     return {
-        "answer": "An error occurred while communicating with the local LLM and cloud AI models. Ensure Ollama is running (`ollama serve`) or a valid GEMINI_API_KEY is provided.",
+        "answer": fallback_answer,
         "sources": sources,
         "confidence": float(confidence),
-        "used_rag": True
+        "used_rag": True,
+        "provider": "transcript_excerpt"
     }
 
 

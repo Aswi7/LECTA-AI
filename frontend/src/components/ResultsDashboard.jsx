@@ -4,13 +4,11 @@ import ChatPanel from './ChatPanel';
 import { 
   FileText, 
   Languages, 
-  Key, 
   HelpCircle, 
   Clock, 
   BookOpen, 
   ChevronRight, 
   ChevronDown,
-  Info,
   CheckCircle2,
   Trophy,
   Globe,
@@ -50,7 +48,6 @@ const ResultsDashboard = ({ result }) => {
   const tabs = [
     { id: 'summary', label: 'Summary Notes', icon: <FileText className="w-4 h-4" /> },
     { id: 'translation', label: 'Translation', icon: <Languages className="w-4 h-4" /> },
-    { id: 'keywords', label: 'Concepts & Entities', icon: <Key className="w-4 h-4" /> },
     { id: 'questions', label: 'Quiz & Practice', icon: <HelpCircle className="w-4 h-4" /> },
     { id: 'chat', label: 'Interactive AI Chat', icon: <MessageSquare className="w-4 h-4" /> },
   ];
@@ -166,56 +163,6 @@ const ResultsDashboard = ({ result }) => {
                 </div>
               )}
 
-              {/* Keywords / Concepts Tab */}
-              {activeTab === 'keywords' && (
-                <div className="space-y-10">
-                  <div>
-                    <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mb-6">Core Lecture Concepts</h3>
-                    <div className="flex flex-wrap gap-3">
-                      {result.concepts?.keywords?.map((kw, idx) => (
-                        <div key={idx} className="group relative">
-                          <div className="relative bg-white dark:bg-slate-800 border-2 border-slate-200/80 dark:border-slate-700/80 px-5 py-3 rounded-2xl flex items-center space-x-3 shadow-2xs group-hover:border-brand-400 dark:group-hover:border-brand-600 transition-all">
-                            <span className="text-base font-extrabold text-slate-800 dark:text-slate-200">{kw.keyword}</span>
-                            <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
-                            <span className="text-xs font-black text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/80 px-2 py-0.5 rounded-lg border border-brand-200 dark:border-brand-800">
-                              {(kw.score * 10).toFixed(1)}
-                            </span>
-                          </div>
-                        </div>
-                      )) || <p className="text-slate-500 text-sm">No keywords extracted.</p>}
-                    </div>
-                  </div>
-
-                  {result.concepts?.entities?.length > 0 && (
-                    <div>
-                      <h3 className="text-lg font-extrabold text-slate-900 dark:text-white mb-4 flex items-center space-x-2">
-                        <Info className="w-5 h-5 text-brand-500" />
-                        <span>Identified Domain Entities</span>
-                      </h3>
-                      <div className="grid gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                        {result.concepts.entities.map((ent, idx) => (
-                          <div key={idx} className="bg-slate-50/70 dark:bg-slate-950/50 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 flex flex-col md:flex-row md:items-center gap-4">
-                            <div className="md:w-1/4">
-                              <span className="text-[10px] font-extrabold text-brand-500 uppercase tracking-widest block mb-0.5">Entity</span>
-                              <p className="text-base font-black text-slate-900 dark:text-white">{ent.text}</p>
-                            </div>
-                            <div className="md:w-1/4">
-                              <span className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-0.5">Category</span>
-                              <span className="px-3 py-0.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full text-[10px] font-extrabold text-slate-700 dark:text-slate-300">
-                                {ent.label}
-                              </span>
-                            </div>
-                            <div className="md:grow">
-                              <span className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-0.5">Context</span>
-                              <p className="text-xs text-slate-600 dark:text-slate-400 font-medium leading-relaxed">{ent.description}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
 
               {/* Quiz & Practice Tab */}
               {activeTab === 'questions' && (
