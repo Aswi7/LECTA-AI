@@ -175,14 +175,17 @@ def generate_topic_name(concepts, default_filename):
 
 def print_timing_breakdown(session_id: str, timings: dict):
     total_time = sum(timings.values())
-    print("\n=======================================================")
-    print(f" ⏱️ LECTURE PROCESSING TIMING BREAKDOWN ({session_id})")
-    print("-------------------------------------------------------")
-    for category, duration in timings.items():
-        print(f" ⏱️ {category}: {duration:.2f} seconds")
-    print("-------------------------------------------------------")
-    print(f" ⏱️ Total Pipeline Time: {total_time:.2f} seconds")
-    print("=======================================================\n")
+    try:
+        print("\n=======================================================")
+        print(f"  [TIMING BREAKDOWN] Session ID: {session_id}")
+        print("-------------------------------------------------------")
+        for category, duration in timings.items():
+            print(f"  - {category}: {duration:.2f} seconds")
+        print("-------------------------------------------------------")
+        print(f"  - Total Pipeline Time: {total_time:.2f} seconds")
+        print("=======================================================\n")
+    except Exception:
+        pass
 
 @app.route('/api/process', methods=['POST'])
 def process_audio_api():
@@ -817,13 +820,13 @@ if __name__ == '__main__':
     db_connected = ping_db()
     if db_connected:
         print("\n=======================================================")
-        print("  🟢 [SUCCESS] MongoDB Atlas Connected Successfully!  ")
+        print("  [SUCCESS] MongoDB Atlas Connected Successfully!  ")
         print("  Database: lecture_ai | Collection: sessions          ")
         print("=======================================================\n")
         logger.info("MongoDB Atlas Connected Successfully!")
     else:
         print("\n=======================================================")
-        print("  ⚠️ [WARNING] MongoDB Offline - Using In-Memory Mode   ")
+        print("  [WARNING] MongoDB Offline - Using In-Memory Mode   ")
         print("=======================================================\n")
         logger.warning("MongoDB Offline - Using In-Memory Mode.")
 
