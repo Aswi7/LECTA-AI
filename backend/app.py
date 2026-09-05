@@ -735,4 +735,19 @@ def reindex_session_api(session_id):
 if __name__ == '__main__':
     os.makedirs(CONFIG.UPLOAD_FOLDER, exist_ok=True)
     os.makedirs(CONFIG.EXPORTS_FOLDER, exist_ok=True)
+    
+    # Check MongoDB connection status on startup
+    db_connected = ping_db()
+    if db_connected:
+        print("\n=======================================================")
+        print("  🟢 [SUCCESS] MongoDB Atlas Connected Successfully!  ")
+        print("  Database: lecture_ai | Collection: sessions          ")
+        print("=======================================================\n")
+        logger.info("MongoDB Atlas Connected Successfully!")
+    else:
+        print("\n=======================================================")
+        print("  ⚠️ [WARNING] MongoDB Offline - Using In-Memory Mode   ")
+        print("=======================================================\n")
+        logger.warning("MongoDB Offline - Using In-Memory Mode.")
+
     app.run(debug=True, port=5000)
