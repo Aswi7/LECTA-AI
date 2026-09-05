@@ -173,11 +173,23 @@ def generate_topic_name(concepts, default_filename):
     return base_name.title() if base_name else "Untitled Lecture"
 
 
+def print_timing_breakdown(session_id: str, timings: dict):
+    total_time = sum(timings.values())
+    print("\n=======================================================")
+    print(f" ⏱️ LECTURE PROCESSING TIMING BREAKDOWN ({session_id})")
+    print("-------------------------------------------------------")
+    for category, duration in timings.items():
+        print(f" ⏱️ {category}: {duration:.2f} seconds")
+    print("-------------------------------------------------------")
+    print(f" ⏱️ Total Pipeline Time: {total_time:.2f} seconds")
+    print("=======================================================\n")
+
 @app.route('/api/process', methods=['POST'])
-def process_audio():
+def process_audio_api():
     start_time = time.time()
     session_id = str(uuid.uuid4())[:8]
     pipeline_steps = []
+    timings = {}
     
     if 'audio' not in request.files:
         return jsonify({"error": "No audio file provided", "session_id": session_id}), 400
@@ -198,24 +210,34 @@ def process_audio():
     processed_path = None
     try:
         # Step 1: Preprocess Audio
+        t_step = time.time()
         processed_path = preprocess_audio(upload_path)
         pipeline_steps.append("preprocess_audio")
+        timings["Audio preprocessing"] = round(time.time() - t_step, 2)
         
         # Step 2: Transcribe Audio
+        t_step = time.time()
         transcript, transcription_confidence = transcribe_audio(processed_path)
         pipeline_steps.append("transcribe_audio")
+        timings["Whisper transcription"] = round(time.time() - t_step, 2)
         
         # Step 3: Detect Language
+        t_step = time.time()
         lang_data = detect_language(transcript)
         pipeline_steps.append("detect_language")
+        timings["Language detection"] = round(time.time() - t_step, 2)
         
         # Step 4: Process Text (NLP)
+        t_step = time.time()
         cleaned_text, sentences = process_text(transcript)
         pipeline_steps.append("process_text")
+        timings["NLP processing"] = round(time.time() - t_step, 2)
         
-        # Parallel AI Modules
+        # Step 5: Parallel AI Modules
+        t_step = time.time()
         ai_results = run_ai_modules(cleaned_text, sentences, target_language)
         pipeline_steps.extend(["summarization", "keyword_extraction", "question_generation", "translation"])
+        timings["AI modules"] = round(time.time() - t_step, 2)
         
         # Confidence scoring report
         from modules.summarizer import get_summary_confidence
@@ -240,23 +262,13 @@ def process_audio():
         # Determine topic name
         topic_name = generate_topic_name(ai_results.get("concepts", {}), filename)
         
-        # Combine all results
-        full_response = {
-            "session_id": session_id,
-            "filename": topic_name,
-            "target_language": target_language,
-            "transcript": transcript,
-            "cleaned_text": cleaned_text,
-            "language": lang_data,
-            "pipeline_steps": pipeline_steps,
-            "processing_time_seconds": round(time.time() - start_time, 2),
-            "confidence_report": confidence_report,
-            **ai_results
-        }
-        
         # Save to DB
-        save_result(session_id, full_response)
+        t_step = time.time()
+        save_result(session_id, {})
+        timings["MongoDB save"] = round(time.time() - t_step, 2)
         
+        # RAG Indexing
+        t_step = time.time()
         try:
             from modules.rag_chat import index_session
             indexed = index_session(
@@ -269,15 +281,35 @@ def process_audio():
             )
             if indexed:
                 pipeline_steps.append("rag_indexed")
-                logger.info(
-                  f"RAG index built successfully for {session_id}")
+                logger.info(f"RAG index built successfully for {session_id}")
             else:
-                logger.error(
-                  f"RAG index_session returned False for {session_id}")
+                logger.error(f"RAG index_session returned False for {session_id}")
         except Exception as e:
             import traceback
             logger.error(f"RAG import or call failed: {str(e)}")
             logger.error(traceback.format_exc())
+        timings["RAG indexing"] = round(time.time() - t_step, 2)
+
+        # Combine all results
+        full_response = {
+            "session_id": session_id,
+            "filename": topic_name,
+            "target_language": target_language,
+            "transcript": transcript,
+            "cleaned_text": cleaned_text,
+            "language": lang_data,
+            "pipeline_steps": pipeline_steps,
+            "processing_time_seconds": round(time.time() - start_time, 2),
+            "confidence_report": confidence_report,
+            "timing_breakdown": timings,
+            **ai_results
+        }
+
+        # Update saved result with complete data & timing breakdown
+        save_result(session_id, full_response)
+        
+        # Output timings console banner
+        print_timing_breakdown(session_id, timings)
         
         return jsonify(full_response), 200
 
@@ -295,6 +327,7 @@ def process_url():
     start_time = time.time()
     session_id = str(uuid.uuid4())[:8]
     pipeline_steps = []
+    timings = {}
     
     data = request.get_json()
     if not data or 'url' not in data:
@@ -307,29 +340,41 @@ def process_url():
     processed_path = None
     try:
         # Step 0: Download from URL
+        t_step = time.time()
         upload_path, title = download_audio_from_url(url, session_id)
         filename = f"{title}.mp3"
         pipeline_steps.append("download_from_url")
+        timings["Media download"] = round(time.time() - t_step, 2)
         
         # Step 1: Preprocess Audio
+        t_step = time.time()
         processed_path = preprocess_audio(upload_path)
         pipeline_steps.append("preprocess_audio")
+        timings["Audio preprocessing"] = round(time.time() - t_step, 2)
         
         # Step 2: Transcribe Audio
+        t_step = time.time()
         transcript, transcription_confidence = transcribe_audio(processed_path)
         pipeline_steps.append("transcribe_audio")
+        timings["Whisper transcription"] = round(time.time() - t_step, 2)
         
         # Step 3: Detect Language
+        t_step = time.time()
         lang_data = detect_language(transcript)
         pipeline_steps.append("detect_language")
+        timings["Language detection"] = round(time.time() - t_step, 2)
         
         # Step 4: Process Text (NLP)
+        t_step = time.time()
         cleaned_text, sentences = process_text(transcript)
         pipeline_steps.append("process_text")
+        timings["NLP processing"] = round(time.time() - t_step, 2)
         
-        # Parallel AI Modules
+        # Step 5: Parallel AI Modules
+        t_step = time.time()
         ai_results = run_ai_modules(cleaned_text, sentences, target_language)
         pipeline_steps.extend(["summarization", "keyword_extraction", "question_generation", "translation"])
+        timings["AI modules"] = round(time.time() - t_step, 2)
         
         # Confidence scoring report
         from modules.summarizer import get_summary_confidence
@@ -354,23 +399,13 @@ def process_url():
         # Determine topic name
         topic_name = generate_topic_name(ai_results.get("concepts", {}), filename)
         
-        # Combine all results
-        full_response = {
-            "session_id": session_id,
-            "filename": topic_name,
-            "target_language": target_language,
-            "transcript": transcript,
-            "cleaned_text": cleaned_text,
-            "language": lang_data,
-            "pipeline_steps": pipeline_steps,
-            "processing_time_seconds": round(time.time() - start_time, 2),
-            "confidence_report": confidence_report,
-            **ai_results
-        }
-        
         # Save to DB
-        save_result(session_id, full_response)
+        t_step = time.time()
+        save_result(session_id, {})
+        timings["MongoDB save"] = round(time.time() - t_step, 2)
         
+        # RAG Indexing
+        t_step = time.time()
         try:
             indexed = index_session(
                 session_id=session_id,
@@ -388,6 +423,28 @@ def process_url():
         except Exception as e:
             logger.warning(
               f"RAG indexing failed for {session_id}: {e}")
+        timings["RAG indexing"] = round(time.time() - t_step, 2)
+
+        # Combine all results
+        full_response = {
+            "session_id": session_id,
+            "filename": topic_name,
+            "target_language": target_language,
+            "transcript": transcript,
+            "cleaned_text": cleaned_text,
+            "language": lang_data,
+            "pipeline_steps": pipeline_steps,
+            "processing_time_seconds": round(time.time() - start_time, 2),
+            "confidence_report": confidence_report,
+            "timing_breakdown": timings,
+            **ai_results
+        }
+
+        # Update saved result with complete data & timing breakdown
+        save_result(session_id, full_response)
+
+        # Output timings console banner
+        print_timing_breakdown(session_id, timings)
         
         return jsonify(full_response), 200
 
@@ -406,6 +463,7 @@ def process_text_api():
     start_time = time.time()
     session_id = str(uuid.uuid4())[:8]
     pipeline_steps = []
+    timings = {}
     
     data = request.get_json()
     if not data or 'text' not in data:
@@ -416,16 +474,22 @@ def process_text_api():
     
     try:
         # Step 1: Detect Language
+        t_step = time.time()
         lang_data = detect_language(text)
         pipeline_steps.append("detect_language")
+        timings["Language detection"] = round(time.time() - t_step, 2)
         
         # Step 2: Process Text (NLP)
+        t_step = time.time()
         cleaned_text, sentences = process_text(text)
         pipeline_steps.append("process_text")
+        timings["NLP processing"] = round(time.time() - t_step, 2)
         
-        # Parallel AI Modules
+        # Step 3: Parallel AI Modules
+        t_step = time.time()
         ai_results = run_ai_modules(cleaned_text, sentences, target_language)
         pipeline_steps.extend(["summarization", "keyword_extraction", "question_generation", "translation"])
+        timings["AI modules"] = round(time.time() - t_step, 2)
         
         # Confidence scoring report
         from modules.summarizer import get_summary_confidence
@@ -452,22 +516,13 @@ def process_text_api():
         # Determine topic name
         topic_name = generate_topic_name(ai_results.get("concepts", {}), "text_input")
         
-        full_response = {
-            "session_id": session_id,
-            "filename": topic_name,
-            "target_language": target_language,
-            "transcript": text,
-            "cleaned_text": cleaned_text,
-            "language": lang_data,
-            "pipeline_steps": pipeline_steps,
-            "processing_time_seconds": round(time.time() - start_time, 2),
-            "confidence_report": confidence_report,
-            **ai_results
-        }
-        
         # Save to DB
-        save_result(session_id, full_response)
+        t_step = time.time()
+        save_result(session_id, {})
+        timings["MongoDB save"] = round(time.time() - t_step, 2)
         
+        # RAG Indexing
+        t_step = time.time()
         try:
             indexed = index_session(
                 session_id=session_id,
@@ -485,6 +540,28 @@ def process_text_api():
         except Exception as e:
             logger.warning(
               f"RAG indexing failed for {session_id}: {e}")
+        timings["RAG indexing"] = round(time.time() - t_step, 2)
+
+        # Combine all results
+        full_response = {
+            "session_id": session_id,
+            "filename": topic_name,
+            "target_language": target_language,
+            "transcript": text,
+            "cleaned_text": cleaned_text,
+            "language": lang_data,
+            "pipeline_steps": pipeline_steps,
+            "processing_time_seconds": round(time.time() - start_time, 2),
+            "confidence_report": confidence_report,
+            "timing_breakdown": timings,
+            **ai_results
+        }
+
+        # Update saved result with complete data & timing breakdown
+        save_result(session_id, full_response)
+
+        # Output timings console banner
+        print_timing_breakdown(session_id, timings)
         
         return jsonify(full_response), 200
 
