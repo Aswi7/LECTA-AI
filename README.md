@@ -102,32 +102,7 @@ LECTAAI/
    ```bash
    pip install -r requirements.txt
    python -m spacy download en_core_web_sm
-   ```
 
-4. **Configure Environment Variables (`.env`)**:
-   Create a `.env` file in the project root:
-   ```env
-   # MongoDB Atlas Connection String
-   MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/?appName=Cluster0
-
-   # Flask Security Key
-   FLASK_SECRET_KEY=your_secret_key_here
-
-   # Storage Folders
-   UPLOAD_FOLDER=backend/uploads
-   EXPORTS_FOLDER=exports
-
-   # Whisper STT Model (Options: tiny, base, small, medium, large)
-   WHISPER_MODEL_SIZE=base
-
-   # AI LLM Provider Configuration (Options: auto, ollama, gemini)
-   LLM_PROVIDER=auto
-   OLLAMA_BASE_URL=http://localhost:11434
-   OLLAMA_MODEL=llama3.2:3b
-
-   # Optional Google Gemini API Key
-   GEMINI_API_KEY=your_gemini_api_key_here
-   ```
 
 5. **Start the Flask Backend Server**:
    ```bash
