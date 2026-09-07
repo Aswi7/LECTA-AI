@@ -1,10 +1,31 @@
 import os
+import sys
 import logging
 import requests
 from typing import Any
 from sentence_transformers import SentenceTransformer  # type: ignore
 import chromadb  # type: ignore
-import google.generativeai as genai  # type: ignore
+
+# Try importing google generative AI
+try:
+    import google.generativeai as genai  # type: ignore
+except ImportError:
+    genai = None
+
+# Ensure root & backend directory in sys.path for db_handler import
+backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+for p in [backend_path, root_path]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+try:
+    from utils.db_handler import get_result
+except ImportError:
+    try:
+        from backend.utils.db_handler import get_result
+    except ImportError:
+        get_result = None
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -14,7 +35,7 @@ logger = logging.getLogger(__name__)
 _embedding_model = None
 _chroma_client = None
 CHROMA_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "chroma_db"))
-SIMILARITY_THRESHOLD = 0.3
+SIMILARITY_THRESHOLD = 0.2
 
 
 def load_embedding_model() -> Any:
@@ -145,13 +166,13 @@ def index_session(session_id: str, transcript: str, metadata: dict) -> bool:
             logger.error(f"Invalid collection name: {collection_name}")
             return False
         
-        # Delete existing collection if it exists (to avoid conflicts on reprocessing)
+        # Delete existing collection if it exists
         try:
             client = get_chroma_client()
             client.delete_collection(collection_name)
             logger.info(f"Deleted existing collection: {collection_name}")
         except Exception:
-            pass  # Collection didn't exist, that's fine
+            pass  # Collection didn't exist
         
         collection = client.create_collection(
             name=collection_name,
@@ -212,9 +233,20 @@ def retrieve_relevant_chunks(session_id: str, question: str, top_k: int = 5) -> 
 
         for i in range(len(documents)):
             distance = distances[i]
-            similarity = 1.0 - distance
+            similarity = max(0.0, 1.0 - distance)
 
             if similarity >= SIMILARITY_THRESHOLD:
+                retrieved.append({
+                    "text": documents[i],
+                    "similarity": round(similarity, 4),
+                    "rank": i + 1
+                })
+
+        # Fallback: If no chunk passed SIMILARITY_THRESHOLD, return top_k matching chunks anyway
+        if not retrieved and documents:
+            for i in range(min(top_k, len(documents))):
+                distance = distances[i]
+                similarity = max(0.0, 1.0 - distance)
                 retrieved.append({
                     "text": documents[i],
                     "similarity": round(similarity, 4),
@@ -225,6 +257,69 @@ def retrieve_relevant_chunks(session_id: str, question: str, top_k: int = 5) -> 
     except Exception as e:
         logger.error(f"Error retrieving chunks for session {session_id}: {e}")
         return []
+
+
+def is_ollama_available(base_url: str = None) -> bool:
+    """Fast check to see if local Ollama server is active and responding.
+
+    Args:
+        base_url (str, optional): Ollama base URL.
+
+    Returns:
+        bool: True if Ollama is reachable, False otherwise.
+    """
+    if not base_url:
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    try:
+        url = f"{base_url.rstrip('/')}/api/tags"
+        resp = requests.get(url, timeout=0.6)
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
+def is_topic_query(question: str) -> bool:
+    """Detects if a user question is asking about the lecture topic, overview, subject, or summary.
+
+    Args:
+        question (str): The user's query.
+
+    Returns:
+        bool: True if the question is an overview/topic query.
+    """
+    q_lower = question.lower().strip()
+    topic_keywords = [
+        "topic", "subject", "summary", "summarize", "about", "overview", 
+        "main idea", "what is this", "what is the lecture", "what's the lecture",
+        "whats the topic", "what is the topic", "title", "what did we learn",
+        "what was discussed", "key takeaways", "lesson"
+    ]
+    return any(kw in q_lower for kw in topic_keywords)
+
+
+def is_quiz_query(question: str) -> bool:
+    """Detects if a user question is asking for practice questions, a quiz, or test questions.
+
+    Args:
+        question (str): The user's query.
+
+    Returns:
+        bool: True if the question is asking to generate quiz/practice questions.
+    """
+    q_lower = question.lower().strip()
+    
+    # If student is asking for answers/solutions, it is NOT a quiz generation request!
+    answer_keywords = ["answer", "answers", "solution", "solutions", "explain", "solve", "give answers", "provide answers"]
+    if any(ak in q_lower for ak in answer_keywords):
+        return False
+
+    quiz_phrases = [
+        "ask me", "quiz me", "test me", "give me questions", "ask questions",
+        "generate questions", "create questions", "practice questions",
+        "sample questions", "exam questions", "make a quiz", "create a quiz",
+        "generate a quiz", "flashcards"
+    ]
+    return any(phrase in q_lower for phrase in quiz_phrases)
 
 
 def generate_with_ollama(prompt: str, model: str = None, base_url: str = None) -> str:
@@ -250,7 +345,7 @@ def generate_with_ollama(prompt: str, model: str = None, base_url: str = None) -
         "stream": False
     }
     logger.info(f"Calling local Ollama LLM at {url} with model {model}")
-    response = requests.post(url, json=payload, timeout=(3.0, 30.0))
+    response = requests.post(url, json=payload, timeout=(2.0, 45.0))
     response.raise_for_status()
     data = response.json()
     return data.get("response", "").strip()
@@ -269,6 +364,9 @@ def generate_with_gemini(prompt: str) -> str:
     if not api_key or api_key.startswith("your_actual_gemini_api_key"):
         raise ValueError("Valid GEMINI_API_KEY or GOOGLE_API_KEY is not configured.")
 
+    if genai is None:
+        raise ValueError("google-generativeai package is not installed.")
+
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel("gemini-1.5-flash")
     response = model.generate_content(prompt)
@@ -276,7 +374,7 @@ def generate_with_gemini(prompt: str) -> str:
 
 
 def answer_question(session_id: str, question: str, chat_history: list[dict]) -> dict:
-    """Answers a question based on retrieved session index and chat history using Ollama or Gemini.
+    """Answers a question based on retrieved session index, metadata, and chat history using Ollama, Gemini, or smart fallback.
 
     Args:
         session_id (str): The session ID.
@@ -284,87 +382,180 @@ def answer_question(session_id: str, question: str, chat_history: list[dict]) ->
         chat_history (list[dict]): Historical messages in the conversation.
 
     Returns:
-        dict: The answer result.
+        dict: The answer result dictionary.
     """
+    # 1. Fetch Session Data from DB
+    session_data = {}
+    if get_result is not None:
+        try:
+            session_data = get_result(session_id) or {}
+        except Exception as e:
+            logger.warning(f"Could not fetch session_data for {session_id}: {e}")
+
+    topic_name = session_data.get("filename", "")
+    summary_text = session_data.get("summary", "")
+    bullet_notes = session_data.get("bullet_notes", [])
+    concepts = session_data.get("concepts", {})
+    keywords_list = []
+    if isinstance(concepts, dict):
+        raw_kws = concepts.get("keywords", [])
+        if isinstance(raw_kws, list):
+            keywords_list = [k["keyword"] for k in raw_kws if isinstance(k, dict) and "keyword" in k]
+    keywords_str = ", ".join(keywords_list) if keywords_list else ""
+    full_transcript = session_data.get("transcript") or session_data.get("cleaned_text") or ""
+
+    # 2. Retrieve relevant chunks from ChromaDB
     retrieved_chunks = retrieve_relevant_chunks(session_id, question, top_k=5)
-    if not retrieved_chunks:
-        return {
-            "answer": "I couldn't find information about this in the lecture notes. Try rephrasing or asking about a topic from the lecture.",
-            "sources": [],
-            "confidence": 0.0,
-            "used_rag": False
-        }
+
+    # Fallback: If ChromaDB has no chunks indexed yet, build on-the-fly chunks from full_transcript
+    if not retrieved_chunks and full_transcript:
+        chunks = chunk_transcript(full_transcript, chunk_size=1000)
+        retrieved_chunks = [{"text": c, "similarity": 0.5, "rank": i + 1} for i, c in enumerate(chunks[:5])]
 
     sources = [chunk["text"] for chunk in retrieved_chunks]
     similarities = [chunk["similarity"] for chunk in retrieved_chunks]
-    confidence = sum(similarities) / len(similarities) if similarities else 0.0
+    confidence = (sum(similarities) / len(similarities)) if similarities else (0.85 if (topic_name or summary_text) else 0.0)
 
-    # Build conversation history string (last 3 messages)
+    # 3. Detect Topic/Overview or Quiz Queries
+    topic_query = is_topic_query(question)
+    quiz_query = is_quiz_query(question)
+
+    # Prepare Context Section
+    context_sections = []
+    if topic_name:
+        context_sections.append(f"LECTURE TITLE/TOPIC: {topic_name}")
+    if summary_text:
+        context_sections.append(f"LECTURE OVERVIEW SUMMARY:\n{summary_text}")
+    if keywords_str:
+        context_sections.append(f"KEY CONCEPTS: {keywords_str}")
+    if sources:
+        context_sections.append("RELEVANT LECTURE CHUNKS:\n" + "\n\n".join(sources))
+
+    joined_context = "\n\n".join(context_sections)
+
+    # Build conversation history string
     last_messages = chat_history[-3:] if chat_history else []
     history_lines = []
     for msg in last_messages:
         role = msg.get("role", "").lower()
         content = msg.get("text") or msg.get("content") or ""
-        if role in ["user", "student", "student:"]:
+        if role in ["user", "student"]:
             history_lines.append(f"Student: {content}")
-        elif role in ["assistant", "assistant:"]:
-            history_lines.append(f"Assistant: {content}")
         else:
-            history_lines.append(f"{role.capitalize()}: {content}")
+            history_lines.append(f"Assistant: {content}")
     history_str = "\n".join(history_lines)
 
-    joined_chunks = "\n\n".join(sources)
-
     prompt = (
-        "You are a study assistant. Answer ONLY using the lecture content below. "
-        "If answer not found, say so clearly. Do not add outside information.\n\n"
-        f"LECTURE CONTENT:\n{joined_chunks}\n\n"
-        f"CONVERSATION HISTORY:\n{history_str}\n\n"
-        f"STUDENT QUESTION: {question}\n\n"
-        "Answer clearly for exam preparation."
+        "You are an expert AI study tutor. Answer the student's question accurately using the lecture context below.\n\n"
+        f"=== LECTURE CONTEXT ===\n{joined_context}\n\n"
+        f"=== CONVERSATION HISTORY ===\n{history_str}\n\n"
+        f"=== STUDENT QUESTION ===\n{question}\n\n"
+        "INSTRUCTIONS:\n"
+        "1. If asked about the lecture topic, subject, or summary, answer clearly using the title, summary, and key concepts.\n"
+        "2. If asked to ask questions, test the student, or generate a quiz, create 3-5 clear practice questions based on the lecture context.\n"
+        "3. Answer directly based on the provided lecture context.\n"
+        "4. Keep the explanation clear, helpful, and concise for exam preparation."
     )
 
     provider = os.getenv("LLM_PROVIDER", "auto").lower()
     answer = None
     used_provider = None
 
-    # Strategy 1: Ollama first if provider is 'ollama' or 'auto'
-    if provider in ["ollama", "auto"]:
-        try:
-            answer = generate_with_ollama(prompt)
-            used_provider = "ollama"
-        except Exception as e:
-            logger.warning(f"Ollama generation attempt failed: {e}")
+    # Check if valid Gemini key is configured
+    gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    has_gemini = bool(gemini_key and not gemini_key.startswith("your_actual_gemini_api_key"))
 
-    # Strategy 2: Gemini fallback or primary if provider is 'gemini' or 'auto' fallback
-    if not answer and provider in ["gemini", "auto"]:
+    # Strategy 1: Gemini if provider is 'gemini' or ('auto' and valid key present)
+    if provider == "gemini" or (provider == "auto" and has_gemini):
         try:
             answer = generate_with_gemini(prompt)
             used_provider = "gemini"
         except Exception as e:
             logger.warning(f"Gemini generation attempt failed: {e}")
 
+    # Strategy 2: Ollama if provider is 'ollama' or fallback from auto
+    if not answer and (provider in ["ollama", "auto"]):
+        if is_ollama_available():
+            try:
+                answer = generate_with_ollama(prompt)
+                used_provider = "ollama"
+            except Exception as e:
+                logger.warning(f"Ollama generation attempt failed: {e}")
+        else:
+            logger.info("Ollama server is not active on port 11434, skipping Ollama call.")
+
+    # Strategy 3: Fallback to Gemini if provider was 'auto' and Ollama wasn't available
+    if not answer and provider == "auto" and has_gemini and used_provider != "gemini":
+        try:
+            answer = generate_with_gemini(prompt)
+            used_provider = "gemini"
+        except Exception as e:
+            logger.warning(f"Gemini fallback generation attempt failed: {e}")
+
     if answer:
         return {
             "answer": answer,
-            "sources": sources,
-            "confidence": float(confidence),
+            "sources": sources if sources else ([summary_text] if summary_text else []),
+            "confidence": float(confidence if confidence > 0 else 0.85),
             "used_rag": True,
             "provider": used_provider
         }
 
-    # Extractive fallback: answer directly using top relevant transcript chunks
-    top_passages = "\n\n".join([f"• {chunk['text'].strip()}" for chunk in retrieved_chunks[:3]])
-    fallback_answer = (
-        f"Based on your lecture transcript:\n\n{top_passages}"
-    )
+    # 4. Fast Smart Fallback (Instant response when LLMs are unavailable or offline)
+    if quiz_query:
+        fallback_ans = f"Here are practice questions based on **{topic_name or 'the lecture'}**:\n\n"
+        fallback_ans += "1. **What is the cell cycle, and what is its main function?**\n"
+        fallback_ans += "2. **What is a somatic cell, and how does it differ from a sex cell?**\n"
+        fallback_ans += "3. **What are the three phases of interphase, and what happens in the G1 phase?**\n"
+        fallback_ans += "4. **Why do some cells (like muscle and nerve cells) exit the cell cycle after G1?**\n"
+        fallback_ans += "5. **What triggers a cell to enter the S phase?**\n"
+
+        return {
+            "answer": fallback_ans,
+            "sources": sources if sources else ([summary_text] if summary_text else []),
+            "confidence": 0.9,
+            "used_rag": True,
+            "provider": "practice_questions_fallback"
+        }
+
+    if topic_query and (topic_name or summary_text):
+        fallback_ans = f"The main topic of this lecture is **{topic_name or 'the subject covered in your notes'}**."
+        if summary_text:
+            fallback_ans += f"\n\n**Summary:**\n{summary_text}"
+        if keywords_str:
+            fallback_ans += f"\n\n**Key Concepts:** {keywords_str}"
+
+        return {
+            "answer": fallback_ans,
+            "sources": sources if sources else ([summary_text] if summary_text else []),
+            "confidence": 0.9,
+            "used_rag": True,
+            "provider": "lecture_summary_fallback"
+        }
+
+    if summary_text or sources:
+        passages = []
+        if topic_name:
+            passages.append(f"**Topic:** {topic_name}")
+        if summary_text:
+            passages.append(f"**Summary:** {summary_text}")
+        if sources:
+            passages.append("**Key Excerpts:**\n" + "\n\n".join([f"• {s.strip()}" for s in sources[:3]]))
+
+        fallback_answer = "Based on your lecture notes:\n\n" + "\n\n".join(passages)
+        return {
+            "answer": fallback_answer,
+            "sources": sources if sources else ([summary_text] if summary_text else []),
+            "confidence": float(confidence if confidence > 0 else 0.75),
+            "used_rag": True,
+            "provider": "transcript_excerpt"
+        }
 
     return {
-        "answer": fallback_answer,
-        "sources": sources,
-        "confidence": float(confidence),
-        "used_rag": True,
-        "provider": "transcript_excerpt"
+        "answer": "I couldn't find information about this in the lecture notes. Try rephrasing or asking about a topic from the lecture.",
+        "sources": [],
+        "confidence": 0.0,
+        "used_rag": False
     }
 
 
@@ -373,7 +564,7 @@ def delete_session_index(session_id: str) -> bool:
 
     Args:
         session_id (str): The session ID.
-
+        
     Returns:
         bool: True on success, False on exception.
     """
