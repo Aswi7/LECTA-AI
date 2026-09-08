@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+import re
 import requests
 from typing import Any
 from sentence_transformers import SentenceTransformer  # type: ignore
@@ -334,13 +335,23 @@ def is_quiz_query(question: str) -> bool:
     if any(ak in q_lower for ak in answer_keywords):
         return False
 
-    quiz_phrases = [
-        "ask me", "quiz me", "test me", "give me questions", "ask questions",
-        "generate questions", "create questions", "practice questions",
-        "sample questions", "exam questions", "make a quiz", "create a quiz",
-        "generate a quiz", "flashcards"
+    quiz_patterns = [
+        r"\bquiz\b",
+        r"\bflashcards?\b",
+        r"ask\s+.*questions?",
+        r"give\s+.*questions?",
+        r"generate\s+.*questions?",
+        r"create\s+.*questions?",
+        r"make\s+.*questions?",
+        r"provide\s+.*questions?",
+        r"practice\s+questions?",
+        r"sample\s+questions?",
+        r"exam\s+questions?",
+        r"test\s+me\b",
+        r"quiz\s+me\b",
+        r"ask\s+me\b"
     ]
-    return any(phrase in q_lower for phrase in quiz_phrases)
+    return any(re.search(pattern, q_lower) for pattern in quiz_patterns)
 
 
 def generate_with_ollama(prompt: str, model: str = None, base_url: str = None) -> str:
