@@ -113,35 +113,73 @@ def download_audio_from_url(url, session_id):
             return os.path.join(CONFIG.UPLOAD_FOLDER, filename), info.get('title', 'Downloaded Video')
 
 def run_ai_modules(cleaned_text, sentences, target_language):
-    """Runs the AI modules with ThreadPoolExecutor."""
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        # Task 1: Summarization
-        fut_summary = executor.submit(lambda: {
+    """Runs the AI modules concurrently based on their data dependency graph.
+    
+    Dependency Graph:
+      1. Phase 1 (Concurrent Initial Tasks):
+         - Task 1: Summarization (summarize_text + generate_bullet_notes)
+         - Task 2: Keyword Extraction (get_key_concepts)
+      2. Phase 2 (Concurrent Dependent Tasks):
+         - Task 3: Summary Translation (triggered as soon as Task 1 finishes)
+         - Task 4: Question Generation (triggered as soon as Task 2 finishes)
+         - Task 5: Keyword Translation (triggered as soon as Task 2 finishes)
+    """
+    t_ai_start = time.time()
+    logger.info(f"Starting AI modules execution (target_language='{target_language}')...")
+
+    def task_summarization():
+        t0 = time.time()
+        res = {
             "summary": summarize_text(cleaned_text, sentences),
             "bullet_notes": generate_bullet_notes(sentences)
-        })
-        
-        # Task 2: Keyword Extraction
-        fut_concepts = executor.submit(get_key_concepts, cleaned_text)
-        
-        # Get summary first so translation operates on the summary text
+        }
+        logger.info(f"AI Module - Summarization completed in {time.time() - t0:.2f}s")
+        return res
+
+    def task_keyword_extraction():
+        t0 = time.time()
+        res = get_key_concepts(cleaned_text)
+        logger.info(f"AI Module - Keyword extraction completed in {time.time() - t0:.2f}s")
+        return res
+
+    def task_translate_summary(summary_text):
+        t0 = time.time()
+        if target_language != "en":
+            translated = translate_text(summary_text, target_language)
+        else:
+            translated = summary_text
+        logger.info(f"AI Module - Summary translation completed in {time.time() - t0:.2f}s")
+        return {"translated_text": translated}
+
+    def task_generate_questions(keywords):
+        t0 = time.time()
+        res = generate_questions(sentences, keywords)
+        logger.info(f"AI Module - Question generation completed in {time.time() - t0:.2f}s")
+        return res
+
+    def task_translate_keywords(keywords):
+        t0 = time.time()
+        res = translate_keywords(keywords, target_language)
+        logger.info(f"AI Module - Keyword translation completed in {time.time() - t0:.2f}s")
+        return res
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        # Phase 1: Submit independent initial tasks concurrently
+        fut_summary = executor.submit(task_summarization)
+        fut_concepts = executor.submit(task_keyword_extraction)
+
+        # Phase 2a: Submit Summary Translation as soon as Summarization completes
         summary_result = fut_summary.result()
         summary_text = summary_result["summary"] if summary_result.get("summary") else cleaned_text
+        fut_translation = executor.submit(task_translate_summary, summary_text)
 
-        # Task 3: Translation (using the lecture summary)
-        fut_translation = executor.submit(lambda: {
-            "translated_text": translate_text(summary_text, target_language) if target_language != "en" else summary_text,
-        })
-        
-        # Get concepts next because questions and keyword translation depend on it
+        # Phase 2b: Submit Question Generation & Keyword Translation as soon as Keyword Extraction completes
         concepts = fut_concepts.result()
-        
-        # Task 4: Question Generation (depends on concepts)
-        fut_questions = executor.submit(generate_questions, sentences, concepts.get("keywords", []))
-        
-        # Additional Translation Task (Keywords)
-        fut_trans_kws = executor.submit(translate_keywords, concepts.get("keywords", []), target_language)
+        keywords = concepts.get("keywords", [])
+        fut_questions = executor.submit(task_generate_questions, keywords)
+        fut_trans_kws = executor.submit(task_translate_keywords, keywords)
 
+        # Gather all results
         results = {
             "summary": summary_result["summary"],
             "bullet_notes": summary_result["bullet_notes"],
@@ -150,7 +188,9 @@ def run_ai_modules(cleaned_text, sentences, target_language):
             "questions": fut_questions.result(),
             "translated_keywords": fut_trans_kws.result()
         }
-        
+
+    total_ai_time = round(time.time() - t_ai_start, 2)
+    logger.info(f"All AI modules completed successfully in total {total_ai_time}s")
     return results
 
 def generate_topic_name(concepts, default_filename):
