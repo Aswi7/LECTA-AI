@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import logging
 import whisper
 import torch
@@ -47,18 +48,28 @@ def load_whisper_model(model_size: str = "base") -> Any:
         return _model_cache[model_size]
 
     logger.info(f"Loading Whisper model '{model_size}'... This may take a moment.")
+    t_start = time.time()
     try:
         device = "cuda" if torch.cuda.is_available() else "cpu"
+        if device == "cpu":
+            # Optimize PyTorch CPU thread count to avoid thread contention on high core-count CPUs
+            cpu_cores = os.cpu_count() or 4
+            optimal_threads = min(8, max(1, cpu_cores))
+            torch.set_num_threads(optimal_threads)
+            logger.info(f"Configured PyTorch CPU threads: {optimal_threads}")
+
         logger.info(f"Using device: {device} for Whisper transcription.")
         model = whisper.load_model(model_size, device=device)
         _model_cache[model_size] = model
-        logger.info(f"Whisper model '{model_size}' loaded successfully on {device}.")
+        load_duration = round(time.time() - t_start, 2)
+        logger.info(f"Whisper model '{model_size}' loaded successfully on {device} in {load_duration}s.")
         return model
     except Exception as e:
         logger.error(f"Failed to load Whisper model '{model_size}': {str(e)}")
         raise
 
 
+@torch.inference_mode()
 def get_transcription_confidence(audio_path: str, model_size: str = "base") -> dict:
     """Runs Whisper transcription and computes confidence score based on no_speech_prob.
 
@@ -77,7 +88,18 @@ def get_transcription_confidence(audio_path: str, model_size: str = "base") -> d
     try:
         model = load_whisper_model(model_size)
         use_fp16 = torch.cuda.is_available()
-        result = model.transcribe(audio_path, fp16=use_fp16)
+        
+        # Load audio buffer directly to prevent duplicate ffmpeg subprocess calls
+        audio_buffer = whisper.load_audio(audio_path)
+        
+        # Use greedy decoding for maximum speed on clear speech
+        result = model.transcribe(
+            audio_buffer,
+            fp16=use_fp16,
+            beam_size=1,
+            best_of=1,
+            temperature=0.0
+        )
         
         segments = result.get("segments", [])
         total_segments = len(segments)
@@ -115,6 +137,7 @@ def get_transcription_confidence(audio_path: str, model_size: str = "base") -> d
         raise
 
 
+@torch.inference_mode()
 def transcribe_audio(audio_path: str, model_size: str = "base") -> tuple[str, dict]:
     """Transcribes an audio file into a plain text string.
 
@@ -134,16 +157,36 @@ def transcribe_audio(audio_path: str, model_size: str = "base") -> tuple[str, di
         logger.error(error_msg)
         raise FileNotFoundError(error_msg)
 
+    t_total_start = time.time()
     try:
         model = load_whisper_model(model_size)
-        logger.info(f"Starting transcription for: {audio_path}")
-        
-        # Turn off fp16 if running on CPU to bypass PyTorch CPU warnings and emulation overhead
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         use_fp16 = torch.cuda.is_available()
-        result = model.transcribe(audio_path, fp16=use_fp16)
+        
+        logger.info(f"Starting optimized Whisper transcription for: {audio_path} (device={device}, fp16={use_fp16})")
+        
+        # Step 1: Pre-load audio waveform array directly to bypass redundant ffmpeg subprocess invocations
+        t_audio_start = time.time()
+        audio_buffer = whisper.load_audio(audio_path)
+        audio_load_time = round(time.time() - t_audio_start, 3)
+        
+        # Step 2: Optimized decoding with greedy search and torch inference mode
+        t_infer_start = time.time()
+        result = model.transcribe(
+            audio_buffer,
+            fp16=use_fp16,
+            beam_size=1,
+            best_of=1,
+            temperature=0.0
+        )
+        inference_time = round(time.time() - t_infer_start, 2)
+        total_whisper_time = round(time.time() - t_total_start, 2)
         
         detected_lang = result.get("language", "unknown")
-        logger.info(f"Transcription complete. Detected language: {detected_lang}")
+        logger.info(
+            f"Whisper transcription complete in {total_whisper_time}s "
+            f"(Audio Load: {audio_load_time}s | Inference: {inference_time}s | Language: {detected_lang})"
+        )
         
         segments = result.get("segments", [])
         total_segments = len(segments)
@@ -183,6 +226,8 @@ def transcribe_audio(audio_path: str, model_size: str = "base") -> tuple[str, di
         logger.error(f"Error during transcription of {audio_path}: {str(e)}")
         raise
 
+
+@torch.inference_mode()
 def transcribe_with_timestamps(audio_path: str, model_size: str = "base") -> List[Dict[str, Any]]:
     """Transcribes an audio file and returns segments with timestamps.
 
@@ -202,13 +247,22 @@ def transcribe_with_timestamps(audio_path: str, model_size: str = "base") -> Lis
         logger.error(error_msg)
         raise FileNotFoundError(error_msg)
 
+    t_start = time.time()
     try:
         model = load_whisper_model(model_size)
-        logger.info(f"Starting timestamped transcription for: {audio_path}")
-        
-        # Turn off fp16 if running on CPU
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         use_fp16 = torch.cuda.is_available()
-        result = model.transcribe(audio_path, fp16=use_fp16)
+        
+        logger.info(f"Starting timestamped transcription for: {audio_path} (device={device})")
+        
+        audio_buffer = whisper.load_audio(audio_path)
+        result = model.transcribe(
+            audio_buffer,
+            fp16=use_fp16,
+            beam_size=1,
+            best_of=1,
+            temperature=0.0
+        )
         
         segments = []
         for segment in result.get("segments", []):
@@ -218,12 +272,14 @@ def transcribe_with_timestamps(audio_path: str, model_size: str = "base") -> Lis
                 "text": segment["text"].strip()
             })
             
-        logger.info(f"Timestamped transcription complete. Generated {len(segments)} segments.")
+        total_time = round(time.time() - t_start, 2)
+        logger.info(f"Timestamped transcription complete in {total_time}s. Generated {len(segments)} segments.")
         return segments
 
     except Exception as e:
         logger.error(f"Error during timestamped transcription of {audio_path}: {str(e)}")
         raise
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -233,9 +289,12 @@ if __name__ == "__main__":
     input_audio = sys.argv[1]
     try:
         # Note: In production, we'd use the processed audio from audio_processor.py
-        transcript = transcribe_audio(input_audio)
+        transcript, confidence = transcribe_audio(input_audio)
         print("\n--- Final Transcript ---")
         print(transcript)
+        print("\n--- Confidence Info ---")
+        print(confidence)
         print("------------------------")
     except Exception as err:
         print(f"Error: {err}")
+
