@@ -45,13 +45,14 @@ EXCLUDED_ENTITIES: Set[str] = {
     "CARDINAL", "ORDINAL", "PERCENT", "MONEY", "QUANTITY", "TIME", "DATE"
 }
 
-def extract_keywords(text: str, top_n: int = 15) -> List[Dict[str, Any]]:
+def extract_keywords(text: str, top_n: int = 15, doc: Any = None) -> List[Dict[str, Any]]:
     """
     Extracts top keywords using TF-IDF and frequency analysis.
     
     Args:
         text: Input lecture text.
         top_n: Number of keywords to return.
+        doc: Optional pre-parsed spaCy Doc object to avoid re-parsing.
         
     Returns:
         List of dictionaries with keyword, score, and frequency.
@@ -59,7 +60,8 @@ def extract_keywords(text: str, top_n: int = 15) -> List[Dict[str, Any]]:
     if not text.strip():
         return []
 
-    doc = nlp(text)
+    if doc is None:
+        doc = nlp(text)
     sentences = [sent.text.strip() for sent in doc.sents if len(sent.text.strip()) > 5]
     
     if not sentences:
@@ -108,12 +110,13 @@ def extract_keywords(text: str, top_n: int = 15) -> List[Dict[str, Any]]:
         logger.error(f"Error in extract_keywords: {e}")
         return []
 
-def extract_named_entities(text: str) -> List[Dict[str, Any]]:
+def extract_named_entities(text: str, doc: Any = None) -> List[Dict[str, Any]]:
     """
     Extracts meaningful named entities using spaCy.
     
     Args:
         text: Input text.
+        doc: Optional pre-parsed spaCy Doc object.
         
     Returns:
         List of deduplicated entity dictionaries.
@@ -121,7 +124,8 @@ def extract_named_entities(text: str) -> List[Dict[str, Any]]:
     if not text.strip():
         return []
 
-    doc = nlp(text)
+    if doc is None:
+        doc = nlp(text)
     entities = {}
     
     for ent in doc.ents:
@@ -139,13 +143,14 @@ def extract_named_entities(text: str) -> List[Dict[str, Any]]:
             
     return list(entities.values())
 
-def get_noun_phrases(text: str, top_n: int = 10) -> List[str]:
+def get_noun_phrases(text: str, top_n: int = 10, doc: Any = None) -> List[str]:
     """
     Extracts multi-word noun phrases and returns the most frequent ones.
     
     Args:
         text: Input text.
         top_n: Number of phrases to return.
+        doc: Optional pre-parsed spaCy Doc object.
         
     Returns:
         List of top multi-word noun phrases.
@@ -153,7 +158,8 @@ def get_noun_phrases(text: str, top_n: int = 10) -> List[str]:
     if not text.strip():
         return []
 
-    doc = nlp(text)
+    if doc is None:
+        doc = nlp(text)
     phrases = []
     
     for chunk in doc.noun_chunks:
@@ -180,10 +186,15 @@ def get_key_concepts(text: str) -> Dict[str, Any]:
     Returns:
         Dictionary containing all extracted concepts.
     """
+    if not text.strip():
+        return {"keywords": [], "entities": [], "noun_phrases": []}
+        
+    # Single spaCy parse reused across keywords, entities, and noun phrases
+    doc = nlp(text)
     return {
-        "keywords": extract_keywords(text),
-        "entities": extract_named_entities(text),
-        "noun_phrases": get_noun_phrases(text)
+        "keywords": extract_keywords(text, doc=doc),
+        "entities": extract_named_entities(text, doc=doc),
+        "noun_phrases": get_noun_phrases(text, doc=doc)
     }
 
 if __name__ == "__main__":

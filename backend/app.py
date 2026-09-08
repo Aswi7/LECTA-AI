@@ -305,11 +305,6 @@ def process_audio_api():
         # Determine topic name
         topic_name = generate_topic_name(ai_results.get("concepts", {}), filename)
         
-        # Save to DB
-        t_step = time.time()
-        save_result(session_id, {})
-        timings["MongoDB save"] = round(time.time() - t_step, 2)
-        
         # RAG Indexing
         t_step = time.time()
         try:
@@ -333,7 +328,8 @@ def process_audio_api():
             logger.error(traceback.format_exc())
         timings["RAG indexing"] = round(time.time() - t_step, 2)
 
-        # Combine all results
+        # Save to DB (single write with complete document)
+        t_step = time.time()
         full_response = {
             "session_id": session_id,
             "filename": topic_name,
@@ -347,9 +343,10 @@ def process_audio_api():
             "timing_breakdown": timings,
             **ai_results
         }
-
-        # Update saved result with complete data & timing breakdown
         save_result(session_id, full_response)
+        timings["MongoDB save"] = round(time.time() - t_step, 2)
+        full_response["timing_breakdown"] = timings
+        full_response["processing_time_seconds"] = round(time.time() - start_time, 2)
         
         # Output timings console banner
         print_timing_breakdown(session_id, timings)
@@ -442,11 +439,6 @@ def process_url():
         # Determine topic name
         topic_name = generate_topic_name(ai_results.get("concepts", {}), filename)
         
-        # Save to DB
-        t_step = time.time()
-        save_result(session_id, {})
-        timings["MongoDB save"] = round(time.time() - t_step, 2)
-        
         # RAG Indexing
         t_step = time.time()
         try:
@@ -468,7 +460,8 @@ def process_url():
               f"RAG indexing failed for {session_id}: {e}")
         timings["RAG indexing"] = round(time.time() - t_step, 2)
 
-        # Combine all results
+        # Save to DB (single write)
+        t_step = time.time()
         full_response = {
             "session_id": session_id,
             "filename": topic_name,
@@ -482,9 +475,10 @@ def process_url():
             "timing_breakdown": timings,
             **ai_results
         }
-
-        # Update saved result with complete data & timing breakdown
         save_result(session_id, full_response)
+        timings["MongoDB save"] = round(time.time() - t_step, 2)
+        full_response["timing_breakdown"] = timings
+        full_response["processing_time_seconds"] = round(time.time() - start_time, 2)
 
         # Output timings console banner
         print_timing_breakdown(session_id, timings)
@@ -559,11 +553,6 @@ def process_text_api():
         # Determine topic name
         topic_name = generate_topic_name(ai_results.get("concepts", {}), "text_input")
         
-        # Save to DB
-        t_step = time.time()
-        save_result(session_id, {})
-        timings["MongoDB save"] = round(time.time() - t_step, 2)
-        
         # RAG Indexing
         t_step = time.time()
         try:
@@ -585,7 +574,8 @@ def process_text_api():
               f"RAG indexing failed for {session_id}: {e}")
         timings["RAG indexing"] = round(time.time() - t_step, 2)
 
-        # Combine all results
+        # Save to DB (single write)
+        t_step = time.time()
         full_response = {
             "session_id": session_id,
             "filename": topic_name,
@@ -599,9 +589,10 @@ def process_text_api():
             "timing_breakdown": timings,
             **ai_results
         }
-
-        # Update saved result with complete data & timing breakdown
         save_result(session_id, full_response)
+        timings["MongoDB save"] = round(time.time() - t_step, 2)
+        full_response["timing_breakdown"] = timings
+        full_response["processing_time_seconds"] = round(time.time() - start_time, 2)
 
         # Output timings console banner
         print_timing_breakdown(session_id, timings)

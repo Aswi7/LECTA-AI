@@ -56,7 +56,9 @@ def detect_language(text: str) -> Dict[str, Any]:
         return default_response
 
     try:
-        results = detect_langs(text)
+        # Evaluate up to 1000 chars for instant language detection without scanning full transcript
+        sample_text = text[:1000] if len(text) > 1000 else text
+        results = detect_langs(sample_text)
         if not results:
             return default_response
 
