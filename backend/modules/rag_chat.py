@@ -354,6 +354,31 @@ def is_quiz_query(question: str) -> bool:
     return any(re.search(pattern, q_lower) for pattern in quiz_patterns)
 
 
+def is_answer_query(question: str) -> bool:
+    """Detects if a user question is asking for answers, solutions, or key explanations to questions.
+
+    Args:
+        question (str): The user's query.
+
+    Returns:
+        bool: True if the question is asking for answers/solutions.
+    """
+    q_lower = question.lower().strip()
+    answer_patterns = [
+        r"give\s+.*answers?",
+        r"what\s+are\s+the\s+answers?",
+        r"show\s+.*answers?",
+        r"provide\s+.*answers?",
+        r"answers?\s+to\s+these",
+        r"answers?\s+to\s+the\s+questions?",
+        r"solutions?\s+for",
+        r"answers?\s+for",
+        r"give\s+me\s+answers",
+        r"give\s+answers"
+    ]
+    return any(re.search(pattern, q_lower) for pattern in answer_patterns)
+
+
 def generate_with_ollama(prompt: str, model: str = None, base_url: str = None) -> str:
     """Generates text completion using local Ollama REST API.
 
@@ -438,24 +463,25 @@ def answer_question(session_id: str, question: str, chat_history: list[dict]) ->
     target_lang = session_data.get("target_language") or session_data.get("language", {}).get("code", "en")
     target_lang_name = LANGUAGE_NAMES.get(target_lang, "English")
 
-    # 2. Detect Topic/Overview or Quiz Queries
+    # 2. Detect Topic/Overview, Quiz, or Answer Queries
     topic_query = is_topic_query(question)
     quiz_query = is_quiz_query(question)
+    answer_q_query = is_answer_query(question)
 
     # 3. Retrieve relevant chunks from ChromaDB
     retrieved_chunks = retrieve_relevant_chunks(session_id, question, top_k=3)
 
-    # Fallback chunking if ChromaDB collection was not indexed yet
-    if not retrieved_chunks and full_transcript and (topic_query or quiz_query):
+    # Fallback chunking if ChromaDB collection was not indexed yet or vector search yielded no high-similarity match for generic overview prompts
+    if not retrieved_chunks and full_transcript and (topic_query or quiz_query or answer_q_query):
         chunks = chunk_transcript(full_transcript, chunk_size=1000)
         retrieved_chunks = [{"text": c, "similarity": 0.5, "rank": i + 1} for i, c in enumerate(chunks[:3])]
 
     sources = [chunk["text"] for chunk in retrieved_chunks]
     similarities = [chunk["similarity"] for chunk in retrieved_chunks]
-    confidence = (sum(similarities) / len(similarities)) if similarities else (0.85 if topic_query else 0.0)
+    confidence = (sum(similarities) / len(similarities)) if similarities else (0.85 if (topic_query or answer_q_query) else 0.0)
 
     # 4. Prepare Context Section
-    if topic_query:
+    if topic_query or answer_q_query:
         context_parts = []
         if topic_name:
             context_parts.append(f"LECTURE TITLE: {topic_name}")
@@ -473,7 +499,7 @@ def answer_question(session_id: str, question: str, chat_history: list[dict]) ->
     missing_msg = get_missing_info_message(target_lang)
 
     # If context is empty and question is a specific QA query, return standardized missing info message
-    if not context_text.strip() and not quiz_query and not topic_query:
+    if not context_text.strip() and not quiz_query and not topic_query and not answer_q_query:
         logger.info(f"\n=================== RAG DEBUG LOG ===================")
         logger.info(f"QUESTION: {question}")
         logger.info(f"RETRIEVED CHUNKS: 0 chunks (below similarity threshold {SIMILARITY_THRESHOLD})")
@@ -593,7 +619,7 @@ def answer_question(session_id: str, question: str, chat_history: list[dict]) ->
             "provider": "practice_questions_fallback"
         }
 
-    if topic_query and (topic_name or summary_text):
+    if (topic_query or answer_q_query) and (topic_name or summary_text):
         fallback_ans = f"The main topic of this lecture is **{topic_name or 'the subject covered in your notes'}**."
         if summary_text:
             fallback_ans += f"\n\n**Summary:**\n{summary_text}"
