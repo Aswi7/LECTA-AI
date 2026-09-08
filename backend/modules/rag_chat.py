@@ -515,7 +515,9 @@ def answer_question(session_id: str, question: str, chat_history: list[dict]) ->
 
     # Length / Style guidance hint based on question type
     q_lower = question.lower()
-    if any(k in q_lower for k in ["what is", "define", "meaning of", "what are"]):
+    if answer_q_query:
+        length_hint = "Provide direct answers and explanations for the main questions/concepts from the lecture as a formatted Q&A list."
+    elif any(k in q_lower for k in ["what is", "define", "meaning of", "what are"]):
         length_hint = "Provide a concise 1-3 sentence definition or direct list."
     elif "why" in q_lower:
         length_hint = "Provide a short, direct explanation of the reason."
@@ -533,7 +535,7 @@ def answer_question(session_id: str, question: str, chat_history: list[dict]) ->
         "Your task is to answer the user's QUESTION using only the relevant information from the provided CONTEXT.\n\n"
         "IMPORTANT RULES:\n"
         "1. Answer ONLY the specific question asked.\n"
-        "2. Do NOT summarize the entire context or lecture.\n"
+        "2. Do NOT summarize the entire context or lecture unless explicitly requested.\n"
         "3. Extract only the information relevant to the question.\n"
         "4. Ignore unrelated information from the context.\n"
         "5. Give a direct answer first.\n"
@@ -619,7 +621,26 @@ def answer_question(session_id: str, question: str, chat_history: list[dict]) ->
             "provider": "practice_questions_fallback"
         }
 
-    if (topic_query or answer_q_query) and (topic_name or summary_text):
+    if answer_q_query:
+        fallback_ans = f"Here are key answers and explanations based on **{topic_name or 'the lecture'}**:\n\n"
+        if keywords_list:
+            fallback_ans += "**Key Concepts & Answers:**\n"
+            for kw in keywords_list:
+                fallback_ans += f"- **{kw}**: Covered in detail in the lecture transcript.\n"
+        elif sources:
+            fallback_ans += f"**Answer Details from Lecture:**\n{sources[0]}"
+        elif summary_text:
+            fallback_ans += f"**Answers Summary:**\n{summary_text}"
+
+        return {
+            "answer": fallback_ans,
+            "sources": sources if sources else [],
+            "confidence": 0.9,
+            "used_rag": True,
+            "provider": "answers_fallback"
+        }
+
+    if topic_query and (topic_name or summary_text):
         fallback_ans = f"The main topic of this lecture is **{topic_name or 'the subject covered in your notes'}**."
         if summary_text:
             fallback_ans += f"\n\n**Summary:**\n{summary_text}"
