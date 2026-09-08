@@ -133,14 +133,16 @@ def run_ai_modules(cleaned_text, sentences, target_language):
             "summary": summarize_text(cleaned_text, sentences),
             "bullet_notes": generate_bullet_notes(sentences)
         }
-        logger.info(f"AI Module - Summarization completed in {time.time() - t0:.2f}s")
-        return res
+        duration = round(time.time() - t0, 2)
+        logger.info(f"AI Module - Summarization completed in {duration}s")
+        return res, duration
 
     def task_keyword_extraction():
         t0 = time.time()
         res = get_key_concepts(cleaned_text)
-        logger.info(f"AI Module - Keyword extraction completed in {time.time() - t0:.2f}s")
-        return res
+        duration = round(time.time() - t0, 2)
+        logger.info(f"AI Module - Keyword extraction completed in {duration}s")
+        return res, duration
 
     def task_translate_summary(summary_text):
         t0 = time.time()
@@ -148,20 +150,23 @@ def run_ai_modules(cleaned_text, sentences, target_language):
             translated = translate_text(summary_text, target_language)
         else:
             translated = summary_text
-        logger.info(f"AI Module - Summary translation completed in {time.time() - t0:.2f}s")
-        return {"translated_text": translated}
+        duration = round(time.time() - t0, 2)
+        logger.info(f"AI Module - Summary translation completed in {duration}s")
+        return {"translated_text": translated}, duration
 
     def task_generate_questions(keywords):
         t0 = time.time()
         res = generate_questions(sentences, keywords)
-        logger.info(f"AI Module - Question generation completed in {time.time() - t0:.2f}s")
-        return res
+        duration = round(time.time() - t0, 2)
+        logger.info(f"AI Module - Question generation completed in {duration}s")
+        return res, duration
 
     def task_translate_keywords(keywords):
         t0 = time.time()
         res = translate_keywords(keywords, target_language)
-        logger.info(f"AI Module - Keyword translation completed in {time.time() - t0:.2f}s")
-        return res
+        duration = round(time.time() - t0, 2)
+        logger.info(f"AI Module - Keyword translation completed in {duration}s")
+        return res, duration
 
     with ThreadPoolExecutor(max_workers=5) as executor:
         # Phase 1: Submit independent initial tasks concurrently
@@ -169,29 +174,40 @@ def run_ai_modules(cleaned_text, sentences, target_language):
         fut_concepts = executor.submit(task_keyword_extraction)
 
         # Phase 2a: Submit Summary Translation as soon as Summarization completes
-        summary_result = fut_summary.result()
+        (summary_result, t_summary) = fut_summary.result()
         summary_text = summary_result["summary"] if summary_result.get("summary") else cleaned_text
         fut_translation = executor.submit(task_translate_summary, summary_text)
 
         # Phase 2b: Submit Question Generation & Keyword Translation as soon as Keyword Extraction completes
-        concepts = fut_concepts.result()
+        (concepts, t_concepts) = fut_concepts.result()
         keywords = concepts.get("keywords", [])
         fut_questions = executor.submit(task_generate_questions, keywords)
         fut_trans_kws = executor.submit(task_translate_keywords, keywords)
+
+        (trans_res, t_trans_sum) = fut_translation.result()
+        (questions_res, t_questions) = fut_questions.result()
+        (trans_kws_res, t_trans_kws) = fut_trans_kws.result()
 
         # Gather all results
         results = {
             "summary": summary_result["summary"],
             "bullet_notes": summary_result["bullet_notes"],
             "concepts": concepts,
-            "translated_content": fut_translation.result()["translated_text"],
-            "questions": fut_questions.result(),
-            "translated_keywords": fut_trans_kws.result()
+            "translated_content": trans_res["translated_text"],
+            "questions": questions_res,
+            "translated_keywords": trans_kws_res
+        }
+
+        ai_timings = {
+            "Summary": t_summary,
+            "Keywords": t_concepts,
+            "Questions": t_questions,
+            "Translation": round(t_trans_sum + t_trans_kws, 2)
         }
 
     total_ai_time = round(time.time() - t_ai_start, 2)
     logger.info(f"All AI modules completed successfully in total {total_ai_time}s")
-    return results
+    return results, ai_timings
 
 def generate_topic_name(concepts, default_filename):
     """Generates a lecture topic name from concepts or cleaned filename."""
@@ -217,12 +233,20 @@ def print_timing_breakdown(session_id: str, timings: dict):
     total_time = sum(timings.values())
     try:
         print("\n=======================================================")
-        print(f"  [TIMING BREAKDOWN] Session ID: {session_id}")
+        print("LECTURE PROCESSING TIMING BREAKDOWN")
         print("-------------------------------------------------------")
-        for category, duration in timings.items():
-            print(f"  - {category}: {duration:.2f} seconds")
+        print(f"Audio preprocessing: {timings.get('Audio preprocessing', 0.0):.2f} seconds")
+        print(f"Whisper transcription: {timings.get('Whisper transcription', 0.0):.2f} seconds")
+        print(f"Language detection: {timings.get('Language detection', 0.0):.2f} seconds")
+        print(f"NLP processing: {timings.get('NLP processing', 0.0):.2f} seconds")
+        print(f"Summary: {timings.get('Summary', 0.0):.2f} seconds")
+        print(f"Keywords: {timings.get('Keywords', 0.0):.2f} seconds")
+        print(f"Questions: {timings.get('Questions', 0.0):.2f} seconds")
+        print(f"Translation: {timings.get('Translation', 0.0):.2f} seconds")
+        print(f"MongoDB save: {timings.get('MongoDB save', 0.0):.2f} seconds")
+        print(f"RAG indexing: {timings.get('RAG indexing', 0.0):.2f} seconds")
         print("-------------------------------------------------------")
-        print(f"  - Total Pipeline Time: {total_time:.2f} seconds")
+        print(f"Total Pipeline Time: {total_time:.2f} seconds")
         print("=======================================================\n")
     except Exception:
         pass
@@ -277,10 +301,9 @@ def process_audio_api():
         timings["NLP processing"] = round(time.time() - t_step, 2)
         
         # Step 5: Parallel AI Modules
-        t_step = time.time()
-        ai_results = run_ai_modules(cleaned_text, sentences, target_language)
+        ai_results, ai_timings = run_ai_modules(cleaned_text, sentences, target_language)
         pipeline_steps.extend(["summarization", "keyword_extraction", "question_generation", "translation"])
-        timings["AI modules"] = round(time.time() - t_step, 2)
+        timings.update(ai_timings)
         
         # Confidence scoring report
         from modules.summarizer import get_summary_confidence
@@ -411,10 +434,9 @@ def process_url():
         timings["NLP processing"] = round(time.time() - t_step, 2)
         
         # Step 5: Parallel AI Modules
-        t_step = time.time()
-        ai_results = run_ai_modules(cleaned_text, sentences, target_language)
+        ai_results, ai_timings = run_ai_modules(cleaned_text, sentences, target_language)
         pipeline_steps.extend(["summarization", "keyword_extraction", "question_generation", "translation"])
-        timings["AI modules"] = round(time.time() - t_step, 2)
+        timings.update(ai_timings)
         
         # Confidence scoring report
         from modules.summarizer import get_summary_confidence
@@ -523,10 +545,9 @@ def process_text_api():
         timings["NLP processing"] = round(time.time() - t_step, 2)
         
         # Step 3: Parallel AI Modules
-        t_step = time.time()
-        ai_results = run_ai_modules(cleaned_text, sentences, target_language)
+        ai_results, ai_timings = run_ai_modules(cleaned_text, sentences, target_language)
         pipeline_steps.extend(["summarization", "keyword_extraction", "question_generation", "translation"])
-        timings["AI modules"] = round(time.time() - t_step, 2)
+        timings.update(ai_timings)
         
         # Confidence scoring report
         from modules.summarizer import get_summary_confidence

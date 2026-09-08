@@ -31,11 +31,32 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# ISO 639-1 language code to full language name mapping
+LANGUAGE_NAMES = {
+    "en": "English",
+    "ta": "Tamil",
+    "hi": "Hindi",
+    "te": "Telugu",
+    "kn": "Kannada",
+    "ml": "Malayalam",
+    "bn": "Bengali",
+    "mr": "Marathi",
+    "gu": "Gujarati",
+    "pa": "Punjabi",
+    "ur": "Urdu",
+    "fr": "French",
+    "de": "German",
+    "es": "Spanish",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ar": "Arabic"
+}
+
 # Module-level variables
 _embedding_model = None
 _chroma_client = None
 CHROMA_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "chroma_db"))
-SIMILARITY_THRESHOLD = 0.2
+SIMILARITY_THRESHOLD = 0.30
 
 
 def load_embedding_model() -> Any:
@@ -200,13 +221,18 @@ def index_session(session_id: str, transcript: str, metadata: dict) -> bool:
         return False
 
 
-def retrieve_relevant_chunks(session_id: str, question: str, top_k: int = 5) -> list[dict]:
+def get_missing_info_message(target_lang: str = "en") -> str:
+    """Returns standardized missing information response in English."""
+    return "I couldn't find this information in the lecture."
+
+
+def retrieve_relevant_chunks(session_id: str, question: str, top_k: int = 3) -> list[dict]:
     """Retrieves relevant chunks from ChromaDB.
 
     Args:
         session_id (str): The session ID.
         question (str): The search question.
-        top_k (int): Number of chunks to retrieve.
+        top_k (int): Maximum number of chunks to retrieve.
 
     Returns:
         list[dict]: List of relevant chunk dictionaries.
@@ -224,34 +250,29 @@ def retrieve_relevant_chunks(session_id: str, question: str, top_k: int = 5) -> 
 
         results = collection.query(
             query_embeddings=[question_embedding],
-            n_results=top_k
+            n_results=top_k * 2
         )
 
         retrieved = []
+        seen_texts = set()
         documents = results.get("documents", [[]])[0]
         distances = results.get("distances", [[]])[0]
 
         for i in range(len(documents)):
             distance = distances[i]
             similarity = max(0.0, 1.0 - distance)
+            doc_text = documents[i].strip()
 
-            if similarity >= SIMILARITY_THRESHOLD:
+            # Filter out low-similarity chunks and duplicates
+            if similarity >= SIMILARITY_THRESHOLD and doc_text not in seen_texts:
+                seen_texts.add(doc_text)
                 retrieved.append({
-                    "text": documents[i],
+                    "text": doc_text,
                     "similarity": round(similarity, 4),
-                    "rank": i + 1
+                    "rank": len(retrieved) + 1
                 })
-
-        # Fallback: If no chunk passed SIMILARITY_THRESHOLD, return top_k matching chunks anyway
-        if not retrieved and documents:
-            for i in range(min(top_k, len(documents))):
-                distance = distances[i]
-                similarity = max(0.0, 1.0 - distance)
-                retrieved.append({
-                    "text": documents[i],
-                    "similarity": round(similarity, 4),
-                    "rank": i + 1
-                })
+                if len(retrieved) >= top_k:
+                    break
 
         return retrieved
     except Exception as e:
@@ -290,7 +311,7 @@ def is_topic_query(question: str) -> bool:
     q_lower = question.lower().strip()
     topic_keywords = [
         "topic", "subject", "summary", "summarize", "about", "overview", 
-        "main idea", "what is this", "what is the lecture", "what's the lecture",
+        "main idea", "what is this lecture", "what is the lecture", "what's the lecture",
         "whats the topic", "what is the topic", "title", "what did we learn",
         "what was discussed", "key takeaways", "lesson"
     ]
@@ -394,7 +415,6 @@ def answer_question(session_id: str, question: str, chat_history: list[dict]) ->
 
     topic_name = session_data.get("filename", "")
     summary_text = session_data.get("summary", "")
-    bullet_notes = session_data.get("bullet_notes", [])
     concepts = session_data.get("concepts", {})
     keywords_list = []
     if isinstance(concepts, dict):
@@ -403,59 +423,101 @@ def answer_question(session_id: str, question: str, chat_history: list[dict]) ->
             keywords_list = [k["keyword"] for k in raw_kws if isinstance(k, dict) and "keyword" in k]
     keywords_str = ", ".join(keywords_list) if keywords_list else ""
     full_transcript = session_data.get("transcript") or session_data.get("cleaned_text") or ""
+    
+    target_lang = session_data.get("target_language") or session_data.get("language", {}).get("code", "en")
+    target_lang_name = LANGUAGE_NAMES.get(target_lang, "English")
 
-    # 2. Retrieve relevant chunks from ChromaDB
-    retrieved_chunks = retrieve_relevant_chunks(session_id, question, top_k=5)
-
-    # Fallback: If ChromaDB has no chunks indexed yet, build on-the-fly chunks from full_transcript
-    if not retrieved_chunks and full_transcript:
-        chunks = chunk_transcript(full_transcript, chunk_size=1000)
-        retrieved_chunks = [{"text": c, "similarity": 0.5, "rank": i + 1} for i, c in enumerate(chunks[:5])]
-
-    sources = [chunk["text"] for chunk in retrieved_chunks]
-    similarities = [chunk["similarity"] for chunk in retrieved_chunks]
-    confidence = (sum(similarities) / len(similarities)) if similarities else (0.85 if (topic_name or summary_text) else 0.0)
-
-    # 3. Detect Topic/Overview or Quiz Queries
+    # 2. Detect Topic/Overview or Quiz Queries
     topic_query = is_topic_query(question)
     quiz_query = is_quiz_query(question)
 
-    # Prepare Context Section
-    context_sections = []
-    if topic_name:
-        context_sections.append(f"LECTURE TITLE/TOPIC: {topic_name}")
-    if summary_text:
-        context_sections.append(f"LECTURE OVERVIEW SUMMARY:\n{summary_text}")
-    if keywords_str:
-        context_sections.append(f"KEY CONCEPTS: {keywords_str}")
-    if sources:
-        context_sections.append("RELEVANT LECTURE CHUNKS:\n" + "\n\n".join(sources))
+    # 3. Retrieve relevant chunks from ChromaDB
+    retrieved_chunks = retrieve_relevant_chunks(session_id, question, top_k=3)
 
-    joined_context = "\n\n".join(context_sections)
+    # Fallback chunking if ChromaDB collection was not indexed yet
+    if not retrieved_chunks and full_transcript and (topic_query or quiz_query):
+        chunks = chunk_transcript(full_transcript, chunk_size=1000)
+        retrieved_chunks = [{"text": c, "similarity": 0.5, "rank": i + 1} for i, c in enumerate(chunks[:3])]
 
-    # Build conversation history string
-    last_messages = chat_history[-3:] if chat_history else []
-    history_lines = []
-    for msg in last_messages:
-        role = msg.get("role", "").lower()
-        content = msg.get("text") or msg.get("content") or ""
-        if role in ["user", "student"]:
-            history_lines.append(f"Student: {content}")
-        else:
-            history_lines.append(f"Assistant: {content}")
-    history_str = "\n".join(history_lines)
+    sources = [chunk["text"] for chunk in retrieved_chunks]
+    similarities = [chunk["similarity"] for chunk in retrieved_chunks]
+    confidence = (sum(similarities) / len(similarities)) if similarities else (0.85 if topic_query else 0.0)
 
+    # 4. Prepare Context Section
+    if topic_query:
+        context_parts = []
+        if topic_name:
+            context_parts.append(f"LECTURE TITLE: {topic_name}")
+        if summary_text:
+            context_parts.append(f"OVERVIEW SUMMARY:\n{summary_text}")
+        if keywords_str:
+            context_parts.append(f"KEY CONCEPTS: {keywords_str}")
+        if sources:
+            context_parts.append("RELEVANT CHUNKS:\n" + "\n\n".join(sources))
+        context_text = "\n\n".join(context_parts)
+    else:
+        # For specific question-answering, pass ONLY top relevant retrieved chunks
+        context_text = "\n\n".join(sources)
+
+    missing_msg = get_missing_info_message(target_lang)
+
+    # If context is empty and question is a specific QA query, return standardized missing info message
+    if not context_text.strip() and not quiz_query and not topic_query:
+        logger.info(f"\n=================== RAG DEBUG LOG ===================")
+        logger.info(f"QUESTION: {question}")
+        logger.info(f"RETRIEVED CHUNKS: 0 chunks (below similarity threshold {SIMILARITY_THRESHOLD})")
+        logger.info(f"FINAL DECISION: Answer not in context -> returning '{missing_msg}'")
+        logger.info(f"=====================================================\n")
+        return {
+            "answer": missing_msg,
+            "sources": [],
+            "confidence": 0.0,
+            "used_rag": False,
+            "provider": "unanswerable_fallback"
+        }
+
+    # Length / Style guidance hint based on question type
+    q_lower = question.lower()
+    if any(k in q_lower for k in ["what is", "define", "meaning of", "what are"]):
+        length_hint = "Provide a concise 1-3 sentence definition or direct list."
+    elif "why" in q_lower:
+        length_hint = "Provide a short, direct explanation of the reason."
+    elif "how" in q_lower:
+        length_hint = "Provide clear, concise steps or process explanation."
+    elif any(k in q_lower for k in ["list", "types of", "examples of"]):
+        length_hint = "Provide a bulleted list of only the requested items."
+    else:
+        length_hint = "Keep the response focused and concise."
+
+    # Build prompt adhering to user requirement
     prompt = (
-        "You are an expert AI study tutor. Answer the student's question accurately using the lecture context below.\n\n"
-        f"=== LECTURE CONTEXT ===\n{joined_context}\n\n"
-        f"=== CONVERSATION HISTORY ===\n{history_str}\n\n"
-        f"=== STUDENT QUESTION ===\n{question}\n\n"
-        "INSTRUCTIONS:\n"
-        "1. If asked about the lecture topic, subject, or summary, answer clearly using the title, summary, and key concepts.\n"
-        "2. If asked to ask questions, test the student, or generate a quiz, create 3-5 clear practice questions based on the lecture context.\n"
-        "3. Answer directly based on the provided lecture context.\n"
-        "4. Keep the explanation clear, helpful, and concise for exam preparation."
+        "SYSTEM:\n"
+        "You are a focused question-answering assistant for a multilingual lecture.\n\n"
+        "Your task is to answer the user's QUESTION using only the relevant information from the provided CONTEXT.\n\n"
+        "IMPORTANT RULES:\n"
+        "1. Answer ONLY the specific question asked.\n"
+        "2. Do NOT summarize the entire context or lecture.\n"
+        "3. Extract only the information relevant to the question.\n"
+        "4. Ignore unrelated information from the context.\n"
+        "5. Give a direct answer first.\n"
+        f"6. {length_hint}\n"
+        "7. Do not add unrelated facts or topics.\n"
+        "8. Do not hallucinate or guess information not supported by the context.\n"
+        "9. If the answer cannot be found in the context, say:\n"
+        f'   "{missing_msg}"\n'
+        "10. Do not mention \"context\", \"retrieved documents\", RAG, or internal processing.\n"
+        "11. Respond in English only.\n\n"
+        f"CONTEXT:\n{context_text}\n\n"
+        f"QUESTION:\n{question}\n\n"
+        "ANSWER:"
     )
+
+    # 5. Debug Logging
+    logger.info(f"\n=================== RAG DEBUG LOG ===================")
+    logger.info(f"QUESTION:\n{question}")
+    logger.info(f"RETRIEVED CHUNKS ({len(retrieved_chunks)}):\n" + ("\n---\n".join([f"[Rank {c['rank']}, Sim {c['similarity']}] {c['text']}" for c in retrieved_chunks]) if retrieved_chunks else "None"))
+    logger.info(f"FINAL PROMPT SENT TO LLM:\n{prompt}")
+    logger.info(f"=====================================================\n")
 
     provider = os.getenv("LLM_PROVIDER", "auto").lower()
     answer = None
@@ -493,26 +555,28 @@ def answer_question(session_id: str, question: str, chat_history: list[dict]) ->
             logger.warning(f"Gemini fallback generation attempt failed: {e}")
 
     if answer:
+        logger.info(f"\n=================== RAG DEBUG LOG (RESPONSE) ===================")
+        logger.info(f"PROVIDER: {used_provider}")
+        logger.info(f"OLLAMA/LLM RESPONSE:\n{answer}")
+        logger.info(f"===============================================================\n")
         return {
             "answer": answer,
-            "sources": sources if sources else ([summary_text] if summary_text else []),
+            "sources": sources if sources else [],
             "confidence": float(confidence if confidence > 0 else 0.85),
             "used_rag": True,
             "provider": used_provider
         }
 
-    # 4. Fast Smart Fallback (Instant response when LLMs are unavailable or offline)
+    # 6. Fallback logic when LLM services are offline/unreachable
     if quiz_query:
         fallback_ans = f"Here are practice questions based on **{topic_name or 'the lecture'}**:\n\n"
-        fallback_ans += "1. **What is the cell cycle, and what is its main function?**\n"
-        fallback_ans += "2. **What is a somatic cell, and how does it differ from a sex cell?**\n"
-        fallback_ans += "3. **What are the three phases of interphase, and what happens in the G1 phase?**\n"
-        fallback_ans += "4. **Why do some cells (like muscle and nerve cells) exit the cell cycle after G1?**\n"
-        fallback_ans += "5. **What triggers a cell to enter the S phase?**\n"
+        fallback_ans += "1. What are the key concepts explained in this lecture?\n"
+        fallback_ans += "2. Explain the main processes described in the text.\n"
+        fallback_ans += "3. How do these mechanisms function together?\n"
 
         return {
             "answer": fallback_ans,
-            "sources": sources if sources else ([summary_text] if summary_text else []),
+            "sources": sources if sources else [],
             "confidence": 0.9,
             "used_rag": True,
             "provider": "practice_questions_fallback"
@@ -522,40 +586,32 @@ def answer_question(session_id: str, question: str, chat_history: list[dict]) ->
         fallback_ans = f"The main topic of this lecture is **{topic_name or 'the subject covered in your notes'}**."
         if summary_text:
             fallback_ans += f"\n\n**Summary:**\n{summary_text}"
-        if keywords_str:
-            fallback_ans += f"\n\n**Key Concepts:** {keywords_str}"
 
         return {
             "answer": fallback_ans,
-            "sources": sources if sources else ([summary_text] if summary_text else []),
+            "sources": sources if sources else [],
             "confidence": 0.9,
             "used_rag": True,
             "provider": "lecture_summary_fallback"
         }
 
-    if summary_text or sources:
-        passages = []
-        if topic_name:
-            passages.append(f"**Topic:** {topic_name}")
-        if summary_text:
-            passages.append(f"**Summary:** {summary_text}")
-        if sources:
-            passages.append("**Key Excerpts:**\n" + "\n\n".join([f"• {s.strip()}" for s in sources[:3]]))
-
-        fallback_answer = "Based on your lecture notes:\n\n" + "\n\n".join(passages)
+    if sources:
+        # Question-specific answer from top matching excerpt
+        fallback_answer = sources[0].strip()
         return {
             "answer": fallback_answer,
-            "sources": sources if sources else ([summary_text] if summary_text else []),
+            "sources": sources,
             "confidence": float(confidence if confidence > 0 else 0.75),
             "used_rag": True,
             "provider": "transcript_excerpt"
         }
 
     return {
-        "answer": "I couldn't find information about this in the lecture notes. Try rephrasing or asking about a topic from the lecture.",
+        "answer": missing_msg,
         "sources": [],
         "confidence": 0.0,
-        "used_rag": False
+        "used_rag": False,
+        "provider": "missing_info_fallback"
     }
 
 
