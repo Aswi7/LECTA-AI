@@ -1,10 +1,21 @@
 import re
+import sys
 import random
 import logging
+import json
+import os
+import requests
 from typing import List, Dict, Any
 from difflib import SequenceMatcher
 
 import spacy
+
+# Ensure backend root is in sys.path
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+for path in (root_dir, backend_dir):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -49,6 +60,44 @@ CONVERSATIONAL_PREFIXES = [
     r"^(as\s+you\s+know\s*,?\s*)"
 ]
 
+GENERIC_QUESTION_PATTERNS = [
+    r"what did you learn",
+    r"did you enjoy",
+    r"what do you think",
+    r"can you explain your understanding",
+    r"would you like to learn more",
+    r"what is your opinion",
+    r"was the video useful",
+    r"true or false",
+    r"true/false",
+    r"multiple choice",
+    r"choose the correct",
+    r"fill in the blank",
+    r"welcome to",
+    r"subscribe",
+    r"in this video",
+    r"in this lecture",
+    r"about the video",
+    r"opinion"
+]
+
+LANGUAGE_NAMES = {
+    "en": "English",
+    "ta": "Tamil",
+    "hi": "Hindi",
+    "te": "Telugu",
+    "kn": "Kannada",
+    "ml": "Malayalam",
+    "bn": "Bengali",
+    "mr": "Marathi",
+    "gu": "Gujarati",
+    "pa": "Punjabi",
+    "ur": "Urdu",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German"
+}
+
 def clean_sentence_for_questions(sent: str) -> str:
     """Strips conversational leading phrases from a sentence."""
     text = sent.strip()
@@ -66,190 +115,94 @@ def is_meta_or_filler_sentence(sent: str) -> bool:
             return True
     return False
 
+def is_generic_or_invalid_question(q_text: str) -> bool:
+    """Checks if a question is generic, conversational, MCQ, True/False, or invalid."""
+    if not q_text or len(q_text.strip()) < 8:
+        return True
+    low = q_text.lower().strip()
+    for pat in GENERIC_QUESTION_PATTERNS:
+        if re.search(pat, low):
+            return True
+    return False
+
 def is_valid_subject(subject: str) -> bool:
-    """Validates if a subject noun chunk is suitable for an academic definition question."""
+    """Validates if a subject noun chunk is suitable for an academic question."""
     low = subject.lower().strip()
     if not low or len(low) < 3:
         return False
     bad_words = {
         "this", "that", "it", "they", "we", "he", "she", "here", "there", "what", "which",
         "video", "videos", "topic", "lecture", "today", "channel", "website", "playlist",
-        "questions", "flashcards", "papers", "example", "thing", "someone", "anyone"
+        "questions", "flashcards", "papers", "example", "thing", "someone", "anyone", "user",
+        "opinion", "viewers", "subscribers"
     }
     if low in bad_words or any(bw in low.split() for bw in bad_words):
         return False
     return True
 
-def get_difficulty(sentence: str) -> str:
-    """
-    Determines sentence difficulty based on length and entity density.
-    
-    Args:
-        sentence: Input sentence string.
-        
-    Returns:
-        Difficulty level: "easy", "medium", or "hard".
-    """
-    doc = nlp(sentence)
-    word_count = len([token for token in doc if not token.is_punct])
-    entity_count = len(doc.ents)
-    
-    if word_count < 12:
-        return "easy"
-    elif word_count > 25 or entity_count > 2:
-        return "hard"
-    else:
-        return "medium"
+def clean_question_text(q_text: str) -> str:
+    """Removes leading numbers/bullets and normalizes formatting."""
+    cleaned = re.sub(r"^\d+[\.\)\s]+", "", q_text.strip())
+    cleaned = cleaned.strip()
+    if cleaned.endswith(".?"):
+        cleaned = cleaned[:-2] + "?"
+    elif cleaned.endswith("??"):
+        cleaned = cleaned.rstrip("?") + "?"
+    elif cleaned and not cleaned.endswith("?") and not cleaned.endswith("."):
+        cleaned += "?"
+    elif cleaned.endswith("."):
+        cleaned = cleaned[:-1] + "?"
+    if cleaned and cleaned[0].islower():
+        cleaned = cleaned[0].upper() + cleaned[1:]
+    return cleaned
 
-def generate_definition_questions(sentences: List[str]) -> List[Dict[str, Any]]:
-    """
-    Generates "What is X?" questions from sentences containing definition patterns.
-    """
-    patterns = [
-        "is defined as", "refers to", "is known as", 
-        "means that", "can be defined as", "is a type of", "is responsible for", "is composed of"
-    ]
-    questions = []
-    
-    for raw_sent in sentences:
-        sent = clean_sentence_for_questions(raw_sent)
-        if is_meta_or_filler_sentence(sent):
-            continue
-        lowercased = sent.lower()
-        matched_pattern = next((p for p in patterns if p in lowercased), None)
-        
-        if matched_pattern:
-            doc = nlp(sent)
-            subject = ""
-            pattern_start_idx = lowercased.find(matched_pattern)
-            
-            for chunk in doc.noun_chunks:
-                if chunk.end_char <= pattern_start_idx:
-                    subject = chunk.text
-                else:
-                    break
-            
-            if subject and is_valid_subject(subject):
-                subject = subject.strip().capitalize()
-                questions.append({
-                    "question": f"What is {subject}?",
-                    "answer": sent,
-                    "type": "definition",
-                    "difficulty": get_difficulty(sent)
-                })
-                
-    return questions
-
-def generate_fill_in_blank(sentences: List[str], keywords: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Generates fill-in-the-blank questions based on extracted keywords.
-    """
-    questions = []
-    keyword_list = [kw["keyword"] for kw in keywords]
-    
-    for raw_sent in sentences:
-        sent = clean_sentence_for_questions(raw_sent)
-        if is_meta_or_filler_sentence(sent):
-            continue
-        if sent.lower().startswith(("what", "how", "why", "can you", "let's", "question", "for example")):
-            continue
-
-        for kw in keyword_list:
-            if not kw or len(kw.strip()) < 3:
-                continue
-            doc = nlp(sent)
-            matches = [token for token in doc if token.text.lower() == kw.lower()]
-            
-            if len(matches) == 1:
-                start = matches[0].idx
-                end = start + len(matches[0].text)
-                masked_sent = sent[:start] + "______" + sent[end:]
-                
-                questions.append({
-                    "question": masked_sent,
-                    "answer": matches[0].text,
-                    "type": "fill_blank",
-                    "difficulty": get_difficulty(sent)
-                })
-                break
-                
-    return questions
-
-def generate_true_false(sentences: List[str]) -> List[Dict[str, Any]]:
-    """
-    Generates True or False questions from declarative sentences.
-    """
-    questions = []
-    
-    for raw_sent in sentences:
-        sent = clean_sentence_for_questions(raw_sent)
-        if is_meta_or_filler_sentence(sent):
-            continue
-        if sent.lower().startswith(("what", "how", "why", "for example", "so", "if you", "you'll")):
-            continue
-
-        doc = nlp(sent)
-        word_count = len([t for t in doc if not t.is_punct])
-        
-        # Must have at least 1 noun chunk or entity to ensure factual substance
-        if not list(doc.noun_chunks) and not list(doc.ents):
-            continue
-
-        if 8 <= word_count <= 25:
-            diff = get_difficulty(sent)
-            questions.append({
-                "question": f"True or False: {sent}",
-                "answer": "True",
-                "type": "true_false",
-                "difficulty": diff
-            })
-            
-            root = next((token for token in doc if token.head == token and token.pos_ == "VERB"), None)
-            if not root:
-                root = next((token for token in doc if token.pos_ == "AUX"), None)
-                
-            if root:
-                if root.lemma_ == "be":
-                    idx = root.idx + len(root.text)
-                    false_sent = sent[:idx] + " not" + sent[idx:]
-                else:
-                    idx = root.idx
-                    false_sent = sent[:idx] + "NOT " + sent[idx:]
-                
-                questions.append({
-                    "question": f"True or False: {false_sent}",
-                    "answer": "False",
-                    "type": "true_false",
-                    "difficulty": diff
-                })
-                
-    return questions
-
-import json
-import os
-import requests
-
-def generate_questions_with_llm(text: str, max_questions: int = 8) -> List[Dict[str, Any]]:
-    """Generates high-quality exam questions using Ollama or Gemini API with JSON output parsing."""
+def generate_questions_with_llm(text: str, max_questions: int = 10, target_language: str = "en") -> List[Dict[str, Any]]:
+    """Generates 10 high-quality academic questions using Ollama or Gemini API with strict formatting rules."""
     if not text or len(text.strip()) < 50:
         return []
 
+    lang_name = LANGUAGE_NAMES.get(target_language.lower(), target_language)
+
     prompt = (
-        f"You are an expert academic professor creating an official exam. Read the lecture content below and generate {max_questions} high-yield, conceptually important exam questions.\n\n"
-        "STRICT QUALITY & RELEVANCE RULES:\n"
-        "1. Focus ONLY on core academic, scientific, or factual concepts taught in the lecture.\n"
-        "2. STRICTLY IGNORE conversational filler, greetings, channel plugs, speaker intros/outros, or meta-comments (e.g. NEVER ask 'What is discussed in this video?' or 'True/False: Welcome to class').\n"
-        "3. Create a balanced mix of Multiple Choice Questions (MCQs), True/False questions, and Short Answer questions.\n"
-        "4. For MCQs, provide 4 distinct, highly plausible domain-specific options.\n"
-        "5. Ensure every question tests real understanding of the subject matter.\n\n"
-        "Output ONLY a raw JSON array of objects with no markdown fences, no ```json formatting, and no conversational text.\n"
-        "Each object must contain:\n"
-        '  "question": (string question text)\n'
-        '  "options": (list of 4 string options for MCQ, or ["True", "False"] for True/False, or [] for Short Answer)\n'
-        '  "answer": (string correct answer)\n'
-        '  "type": ("mcq", "true_false", or "short_answer")\n'
-        '  "difficulty": ("easy", "medium", or "hard")\n\n'
-        f"LECTURE CONTENT:\n{text[:4000]}"
+        f"You are an expert academic professor. Read the lecture transcript below and generate EXACTLY {max_questions} academic questions based ONLY on the content of the lecture.\n\n"
+        "STRICT RULES:\n"
+        f"1. Generate EXACTLY {max_questions} questions.\n"
+        "2. Generate ONLY normal academic questions.\n"
+        "   - Do NOT generate True/False questions.\n"
+        "   - Do NOT generate MCQs (Multiple Choice Questions).\n"
+        "   - Do NOT generate yes/no questions.\n"
+        "   - Do NOT generate conversational questions.\n"
+        "   - Do NOT generate questions about the user or personal experiences.\n"
+        "   - Do NOT generate greetings, casual remarks, or meta-questions.\n"
+        "   - Do NOT generate questions unrelated to the lecture.\n"
+        "3. Every question MUST be directly answerable from the lecture content.\n"
+        "4. Base questions on actual concepts, facts, explanations, processes, examples, definitions, methods, or key points discussed in the lecture.\n"
+        "5. Preferred question patterns:\n"
+        "   - What is ...?\n"
+        "   - Explain ...\n"
+        "   - Why is ... important?\n"
+        "   - How does ... work?\n"
+        "   - What are the main features of ...?\n"
+        "   - What are the steps involved in ...?\n"
+        "   - What is the difference between ...?\n"
+        "   - What are the advantages/disadvantages of ...?\n"
+        "   - How is ... used?\n"
+        "   - What happens when ...?\n"
+        "6. DO NOT invent information that is not present in the transcript.\n"
+        "7. DO NOT generate generic questions like 'What did you learn from this video?', 'Did you enjoy the video?', 'What do you think about this topic?', 'Was the video useful?'.\n"
+        "8. Avoid duplicate or nearly identical questions. Cover different topics from the lecture.\n"
+        "9. Maintain strict difficulty distribution:\n"
+        "   - 3 basic understanding questions (difficulty: 'easy')\n"
+        "   - 4 conceptual/explanation questions (difficulty: 'medium')\n"
+        "   - 3 application/comparison/analysis questions (difficulty: 'hard')\n"
+        f"10. Target Language: {lang_name} ({target_language}). Generate ALL questions and answers in {lang_name}.\n\n"
+        "Output ONLY a raw JSON array of objects with no markdown formatting or commentary.\n"
+        "Each JSON object must contain:\n"
+        '  "question": string (the academic question text)\n'
+        '  "answer": string (concise answer based strictly on the transcript)\n'
+        '  "type": "academic"\n'
+        '  "difficulty": "easy" | "medium" | "hard"\n\n'
+        f"LECTURE CONTENT:\n{text[:6000]}"
     )
 
     provider = os.getenv("LLM_PROVIDER", "auto").lower()
@@ -263,7 +216,7 @@ def generate_questions_with_llm(text: str, max_questions: int = 8) -> List[Dict[
             res = requests.post(
                 f"{base_url}/api/generate",
                 json={"model": model, "prompt": prompt, "stream": False},
-                timeout=5
+                timeout=2
             )
             if res.status_code == 200:
                 raw_response = res.json().get("response", "").strip()
@@ -297,93 +250,253 @@ def generate_questions_with_llm(text: str, max_questions: int = 8) -> List[Dict[
     try:
         data = json.loads(clean_json)
         if isinstance(data, list) and len(data) > 0:
-            logger.info(f"Successfully generated {len(data)} AI exam questions")
-            return data[:max_questions]
+            valid_qs = []
+            for item in data:
+                if isinstance(item, dict) and "question" in item:
+                    q_str = clean_question_text(str(item["question"]))
+                    if not is_generic_or_invalid_question(q_str) and not is_meta_or_filler_sentence(q_str):
+                        valid_qs.append({
+                            "question": q_str,
+                            "answer": str(item.get("answer", "")).strip(),
+                            "type": "academic",
+                            "difficulty": item.get("difficulty", "medium") if item.get("difficulty") in ["easy", "medium", "hard"] else "medium"
+                        })
+            if valid_qs:
+                logger.info(f"Successfully generated {len(valid_qs)} AI academic questions")
+                return valid_qs[:max_questions]
     except Exception as e:
         logger.error(f"Failed to parse AI question JSON response: {e}")
 
     return []
 
+def generate_academic_rule_based(sentences: List[str], keywords: List[Dict[str, Any]], max_questions: int = 10) -> List[Dict[str, Any]]:
+    """spaCy rule-based generator for academic questions following strict academic patterns."""
+    clean_sents = [clean_sentence_for_questions(s) for s in sentences if not is_meta_or_filler_sentence(s)]
+    if not clean_sents:
+        clean_sents = sentences
 
-def generate_questions(sentences: List[str], keywords: List[Dict[str, Any]], max_questions: int = 10) -> List[Dict[str, Any]]:
-    """
-    Combines AI LLM question generation with spaCy rule-based fallback.
-    """
-    clean_sentences = [s for s in sentences if not is_meta_or_filler_sentence(s)]
-    if not clean_sentences:
-        clean_sentences = sentences
+    extracted_subjects = []
+    for kw in keywords:
+        k_text = kw.get("keyword", "").strip()
+        if is_valid_subject(k_text) and k_text not in extracted_subjects:
+            extracted_subjects.append(k_text)
 
-    full_text = " ".join(clean_sentences)
-    ai_questions = generate_questions_with_llm(full_text, max_questions=max_questions)
-    
-    if ai_questions:
-        filtered_ai_qs = [
-            q for q in ai_questions 
-            if isinstance(q, dict) and "question" in q and not is_meta_or_filler_sentence(q["question"])
+    for sent in clean_sents:
+        doc = nlp(sent)
+        for chunk in doc.noun_chunks:
+            chunk_text = chunk.text.strip()
+            if is_valid_subject(chunk_text) and chunk_text not in extracted_subjects:
+                extracted_subjects.append(chunk_text)
+
+    candidate_qs = []
+
+    # Category 1: Definitions ("What is X?") -> Easy
+    def_patterns = ["is defined as", "refers to", "is known as", "means that", "can be defined as", "is a type of", "is the process of"]
+    for sent in clean_sents:
+        low_sent = sent.lower()
+        for pat in def_patterns:
+            if pat in low_sent:
+                doc = nlp(sent)
+                pattern_idx = low_sent.find(pat)
+                subject = ""
+                for chunk in doc.noun_chunks:
+                    if chunk.end_char <= pattern_idx:
+                        subject = chunk.text.strip()
+                    else:
+                        break
+                if not subject and extracted_subjects:
+                    for subj in extracted_subjects:
+                        if subj.lower() in low_sent[:pattern_idx + 10]:
+                            subject = subj
+                            break
+                if subject and is_valid_subject(subject):
+                    candidate_qs.append({
+                        "question": f"What is {subject.capitalize()}?",
+                        "answer": sent,
+                        "type": "academic",
+                        "difficulty": "easy"
+                    })
+                    break
+
+    # Category 2: Conceptual & Explanation -> Medium
+    for sent in clean_sents:
+        low_sent = sent.lower()
+        if any(w in low_sent for w in ["works", "operates", "functions", "serves", "helps", "allows", "enables", "provides", "uses"]):
+            for subj in extracted_subjects:
+                if subj.lower() in low_sent:
+                    candidate_qs.append({
+                        "question": f"How does {subj} work?",
+                        "answer": sent,
+                        "type": "academic",
+                        "difficulty": "medium"
+                    })
+                    candidate_qs.append({
+                        "question": f"Explain {subj}.",
+                        "answer": sent,
+                        "type": "academic",
+                        "difficulty": "medium"
+                    })
+                    break
+
+        if any(w in low_sent for w in ["feature", "component", "consists of", "contains", "composed of", "includes"]):
+            for subj in extracted_subjects:
+                if subj.lower() in low_sent:
+                    candidate_qs.append({
+                        "question": f"What are the main features of {subj}?",
+                        "answer": sent,
+                        "type": "academic",
+                        "difficulty": "medium"
+                    })
+                    break
+
+    # Category 3: Application / Importance / Analysis -> Hard
+    for sent in clean_sents:
+        low_sent = sent.lower()
+        if any(w in low_sent for w in ["important", "essential", "crucial", "vital", "key", "significance", "role"]):
+            for subj in extracted_subjects:
+                if subj.lower() in low_sent:
+                    candidate_qs.append({
+                        "question": f"Why is {subj} important?",
+                        "answer": sent,
+                        "type": "academic",
+                        "difficulty": "hard"
+                    })
+                    break
+        if any(w in low_sent for w in ["when", "if", "result", "causes", "leads to", "produces", "affects"]):
+            for subj in extracted_subjects:
+                if subj.lower() in low_sent:
+                    candidate_qs.append({
+                        "question": f"What happens when {subj} is used?",
+                        "answer": sent,
+                        "type": "academic",
+                        "difficulty": "hard"
+                    })
+                    break
+
+    # If candidate questions are fewer than max_questions, generate from extracted subjects using templates
+    if len(candidate_qs) < max_questions and extracted_subjects:
+        templates = [
+            ("What is {subj}?", "easy"),
+            ("Explain the concept of {subj}.", "medium"),
+            ("Why is {subj} important in this topic?", "hard"),
+            ("How is {subj} used?", "medium"),
+            ("What are the main features of {subj}?", "easy"),
+            ("What is the role of {subj}?", "hard")
         ]
-        if filtered_ai_qs:
-            return filtered_ai_qs[:max_questions]
+        for subj in extracted_subjects:
+            for tmpl, diff in templates:
+                ans = next((s for s in clean_sents if subj.lower() in s.lower()), clean_sents[0] if clean_sents else "")
+                candidate_qs.append({
+                    "question": tmpl.format(subj=subj.capitalize()),
+                    "answer": ans,
+                    "type": "academic",
+                    "difficulty": diff
+                })
+                if len(candidate_qs) >= max_questions * 3:
+                    break
 
-    logger.info("Falling back to spaCy rule-based question generation")
-    all_qs = []
-    all_qs.extend(generate_definition_questions(clean_sentences))
-    all_qs.extend(generate_fill_in_blank(clean_sentences, keywords))
-    all_qs.extend(generate_true_false(clean_sentences))
-    
-    # Deduplicate by similarity
+    # Deduplicate candidate questions
     unique_qs = []
-    for q in all_qs:
-        is_duplicate = False
+    for q in candidate_qs:
+        if is_generic_or_invalid_question(q["question"]):
+            continue
+        is_dup = False
         for uq in unique_qs:
-            similarity = SequenceMatcher(None, q["question"].lower(), uq["question"].lower()).ratio()
-            if similarity > 0.8:
-                is_duplicate = True
+            sim = SequenceMatcher(None, q["question"].lower(), uq["question"].lower()).ratio()
+            if sim > 0.75:
+                is_dup = True
                 break
-        if not is_duplicate:
+        if not is_dup:
             unique_qs.append(q)
-            
-    # Balancing: 40% fill-blank, 30% true/false, 30% definition
-    fill_blank_qs = [q for q in unique_qs if q["type"] == "fill_blank"]
-    tf_qs = [q for q in unique_qs if q["type"] == "true_false"]
-    def_qs = [q for q in unique_qs if q["type"] == "definition"]
+
+    # Balance difficulty: 3 easy, 4 medium, 3 hard
+    easy_qs = [q for q in unique_qs if q["difficulty"] == "easy"]
+    med_qs = [q for q in unique_qs if q["difficulty"] == "medium"]
+    hard_qs = [q for q in unique_qs if q["difficulty"] == "hard"]
+
+    selected = []
+    selected.extend(easy_qs[:3])
+    selected.extend(med_qs[:4])
+    selected.extend(hard_qs[:3])
+
+    remaining = [q for q in unique_qs if q not in selected]
+    needed = max_questions - len(selected)
+    if needed > 0 and remaining:
+        selected.extend(remaining[:needed])
+
+    # If still fewer than max_questions (10), pad with general subject-based academic questions from available sentences
+    if len(selected) < max_questions and clean_sents:
+        for idx, sent in enumerate(clean_sents):
+            if len(selected) >= max_questions:
+                break
+            doc = nlp(sent)
+            n_chunks = [c.text for c in doc.noun_chunks if is_valid_subject(c.text)]
+            if n_chunks:
+                subj = n_chunks[0].capitalize()
+                q_text = f"What is the significance of {subj}?"
+                if not any(uq["question"].lower() == q_text.lower() for uq in selected):
+                    selected.append({
+                        "question": q_text,
+                        "answer": sent,
+                        "type": "academic",
+                        "difficulty": "medium"
+                    })
+
+    # Sort difficulty order: easy, medium, hard
+    diff_order = {"easy": 0, "medium": 1, "hard": 2}
+    selected.sort(key=lambda x: diff_order.get(x["difficulty"], 1))
+
+    return selected[:max_questions]
+
+def generate_questions(sentences: List[str], keywords: List[Dict[str, Any]], max_questions: int = 10, target_language: str = "en") -> List[Dict[str, Any]]:
+    """
+    Main question generation entry point.
+    Generates exactly max_questions (default 10) academic questions in English ONLY.
+    """
+    clean_sents = [s for s in sentences if not is_meta_or_filler_sentence(s)]
+    if not clean_sents:
+        clean_sents = sentences
+
+    full_text = " ".join(clean_sents)
+    ai_questions = generate_questions_with_llm(full_text, max_questions=max_questions, target_language="en")
+
+    if ai_questions and len(ai_questions) >= max_questions:
+        return ai_questions[:max_questions]
+
+    # If AI questions yielded some questions but fewer than max_questions, use rule-based to fill the rest
+    logger.info("Using spaCy academic rule-based question generation to ensure exact 10 questions")
+    rb_questions = generate_academic_rule_based(clean_sents, keywords, max_questions=max_questions)
+
+    combined = []
+    if ai_questions:
+        combined.extend(ai_questions)
     
-    target_fb = int(max_questions * 0.4)
-    target_tf = int(max_questions * 0.3)
-    target_def = max_questions - target_fb - target_tf
-    
-    # Sample from each
-    final_qs = []
-    final_qs.extend(random.sample(fill_blank_qs, min(len(fill_blank_qs), target_fb)))
-    final_qs.extend(random.sample(tf_qs, min(len(tf_qs), target_tf)))
-    final_qs.extend(random.sample(def_qs, min(len(def_qs), target_def)))
-    
-    # If we didn't hit max_questions, fill in with whatever is left
-    remaining_pool = [q for q in unique_qs if q not in final_qs]
-    needed = max_questions - len(final_qs)
-    if needed > 0 and remaining_pool:
-        final_qs.extend(random.sample(remaining_pool, min(len(remaining_pool), needed)))
-        
-    # Sort by difficulty: easy first, then medium, then hard
-    diff_map = {"easy": 0, "medium": 1, "hard": 2}
-    final_qs.sort(key=lambda x: diff_map.get(x["difficulty"], 1))
-    
-    return final_qs[:max_questions]
+    for q in rb_questions:
+        if len(combined) >= max_questions:
+            break
+        if not any(SequenceMatcher(None, q["question"].lower(), cq["question"].lower()).ratio() > 0.75 for cq in combined):
+            combined.append(q)
+
+    # Final guarantee of difficulty distribution tag and clean question format
+    for idx, q in enumerate(combined):
+        q["question"] = clean_question_text(q["question"])
+
+    return combined[:max_questions]
 
 if __name__ == "__main__":
-    # Test block
     test_sentences = [
         "Photosynthesis is defined as the process by which green plants use sunlight to synthesize nutrients from carbon dioxide and water.",
         "The nucleus is known as the control center of the cell.",
         "Mitochondria generate most of the chemical energy needed to power the cell's biochemical reactions.",
-        "DNA stands for deoxyribonucleic acid.",
+        "DNA stands for deoxyribonucleic acid and carries genetic information.",
         "ATP refers to adenosine triphosphate, the primary energy carrier in all living organisms.",
-        "Gravity is a fundamental force of nature.",
+        "Gravity is a fundamental force of nature that attracts objects with mass.",
         "The Speed of Light is approximately 299,792,458 meters per second.",
-        "Oxygen is essential for human life.",
+        "Oxygen is essential for cellular respiration in human life.",
         "Water boils at 100 degrees Celsius at standard atmospheric pressure.",
-        "The human heart has four chambers."
+        "The human heart has four chambers that pump blood throughout the body."
     ]
-    
+
     test_keywords = [
         {"keyword": "Photosynthesis", "score": 0.9},
         {"keyword": "Mitochondria", "score": 0.85},
@@ -391,10 +504,11 @@ if __name__ == "__main__":
         {"keyword": "Oxygen", "score": 0.75},
         {"keyword": "Gravity", "score": 0.7}
     ]
-    
-    print("--- Generating Questions ---")
-    questions = generate_questions(test_sentences, test_keywords, max_questions=8)
-    
+
+    print("--- Generating Academic Questions (10 Questions) ---")
+    questions = generate_questions(test_sentences, test_keywords, max_questions=10)
+
+    print(f"Total questions generated: {len(questions)}")
     for i, q in enumerate(questions):
-        print(f"{i+1}. [{q['type'].upper()} | {q['difficulty'].upper()}] {q['question']}")
+        print(f"{i+1}. [{q['difficulty'].upper()}] {q['question']}")
         print(f"   Answer: {q['answer']}\n")

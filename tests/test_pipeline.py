@@ -63,30 +63,36 @@ class TestLecturePipeline(unittest.TestCase):
             self.assertFalse(nlp.vocab[kw].is_stop, f"Keyword '{kw}' should not be a stopword.")
 
     def test_question_generation(self):
-        """Verifies that definition questions are correctly identified and generated."""
+        """Verifies that exactly 10 academic questions are generated without forbidden types."""
         sentences = [
             "Photosynthesis is defined as the process of light conversion.",
-            "This is a standard sentence about biology.",
-            "Water is essential for life.",
-            "Cells are the building blocks of organisms.",
-            "DNA carries genetic information."
+            "Water is essential for plant life.",
+            "Cells are the structural building blocks of all organisms.",
+            "DNA carries genetic information in all living beings.",
+            "Mitochondria generate power and energy for the cell.",
+            "Chlorophyll absorbs light energy during photosynthesis.",
+            "Respiration releases energy from glucose.",
+            "Enzymes act as biological catalysts to speed up chemical reactions.",
+            "Ribosomes synthesize proteins inside the cell.",
+            "The cell membrane controls the movement of substances in and out."
         ]
-        keywords = [{"keyword": "Photosynthesis", "score": 1.0}]
-        questions = generate_questions(sentences, keywords)
+        keywords = [
+            {"keyword": "Photosynthesis", "score": 1.0},
+            {"keyword": "Mitochondria", "score": 0.9},
+            {"keyword": "DNA", "score": 0.8}
+        ]
+        questions = generate_questions(sentences, keywords, max_questions=10)
         
-        definition_qs = [q for q in questions if q['type'] == 'definition']
-        self.assertGreaterEqual(len(definition_qs), 1)
-        self.assertIn("What is Photosynthesis?", definition_qs[0]['question'])
-
-    def test_fill_blank_generation(self):
-        """Verifies that fill-in-the-blank questions contain a masked keyword."""
-        sentences = ["Mitochondria are the powerhouse of the cell."]
-        keywords = [{"keyword": "Mitochondria", "score": 1.0}]
-        questions = generate_questions(sentences, keywords)
+        self.assertEqual(len(questions), 10, "Should generate exactly 10 academic questions")
         
-        fill_blank_qs = [q for q in questions if q['type'] == 'fill_blank']
-        if fill_blank_qs:
-            self.assertIn("______", fill_blank_qs[0]['question'])
+        # Verify no forbidden question types (MCQs, True/False, fill-in-blanks)
+        for q in questions:
+            q_text = q['question'].lower()
+            self.assertNotIn("______", q_text, "Questions must not contain fill-in-the-blank masks")
+            self.assertFalse(q_text.startswith("true or false"), "Questions must not be True/False")
+            self.assertNotIn("choose the correct option", q_text)
+            self.assertNotIn("did you enjoy", q_text)
+            self.assertNotIn("what did you learn from this video", q_text)
 
     def test_language_detection(self):
         """Verifies that Tamil text is correctly identified."""

@@ -340,21 +340,20 @@ def export_as_pdf(session_data: Dict[str, Any], output_path: str) -> str:
     story.append(create_callout_box(translation, '#F5F3FF', '#DDD6FE')) # Violet-50 / Violet-200
     story.append(Spacer(1, 15))
     
-    # Section: Exam Questions
-    story.append(create_section_header("Exam Questions & Answers"))
+    # Section: Academic Exam Questions
+    story.append(create_section_header("Academic Exam Questions & Answers"))
     story.append(Spacer(1, 8))
     questions = session_data.get('questions', [])
     if questions:
-        q_types = {'definition': 'Definitions', 'fill_blank': 'Fill in the Blanks', 'true_false': 'True or False'}
-        for q_type, q_label in q_types.items():
-            type_qs = [q for q in questions if q['type'] == q_type]
-            if type_qs:
-                story.append(Paragraph(f"<u>{q_label}</u>", heading2_style))
-                story.append(Spacer(1, 4))
-                for q in type_qs:
-                    story.append(Paragraph(f"<b>Q:</b> {q['question']}", question_style))
-                    story.append(Paragraph(f"<b>A:</b> {q['answer']}", answer_style))
-                    story.append(Spacer(1, 4))
+        for idx, q in enumerate(questions, 1):
+            q_text = q.get('question', '') if isinstance(q, dict) else str(q)
+            a_text = q.get('answer', '') if isinstance(q, dict) else ''
+            diff = q.get('difficulty', '').upper() if isinstance(q, dict) and q.get('difficulty') else ''
+            diff_tag = f" [{diff}]" if diff else ''
+            story.append(Paragraph(f"<b>{idx}. {q_text}</b>{diff_tag}", question_style))
+            if a_text:
+                story.append(Paragraph(f"<b>Answer:</b> {a_text}", answer_style))
+            story.append(Spacer(1, 4))
     else:
         story.append(Paragraph("Not available", body_style))
     
@@ -433,21 +432,18 @@ def export_as_pdf(session_data: Dict[str, Any], output_path: str) -> str:
         story.append(create_callout_box(sanitize(session_data.get('translated_content') or "Not available"), '#F5F3FF', '#DDD6FE'))
         story.append(Spacer(1, 15))
         
-        # Exam Questions
-        story.append(create_section_header("Exam Questions & Answers"))
+        # Academic Exam Questions
+        story.append(create_section_header("Academic Exam Questions & Answers"))
         story.append(Spacer(1, 8))
         questions = session_data.get('questions', [])
         if questions:
-            q_types = {'definition': 'Definitions', 'fill_blank': 'Fill in the Blanks', 'true_false': 'True or False'}
-            for q_type, q_label in q_types.items():
-                type_qs = [q for q in questions if q['type'] == q_type]
-                if type_qs:
-                    story.append(Paragraph(f"<u>{q_label}</u>", heading2_style))
-                    story.append(Spacer(1, 4))
-                    for q in type_qs:
-                        story.append(Paragraph(f"<b>Q:</b> {sanitize(q['question'])}", question_style))
-                        story.append(Paragraph(f"<b>A:</b> {sanitize(q['answer'])}", answer_style))
-                        story.append(Spacer(1, 4))
+            for idx, q in enumerate(questions, 1):
+                q_text = sanitize(q.get('question', '') if isinstance(q, dict) else str(q))
+                a_text = sanitize(q.get('answer', '') if isinstance(q, dict) else '')
+                story.append(Paragraph(f"<b>{idx}. {q_text}</b>", question_style))
+                if a_text:
+                    story.append(Paragraph(f"<b>Answer:</b> {a_text}", answer_style))
+                story.append(Spacer(1, 4))
         else:
             story.append(Paragraph("Not available", body_style))
             
@@ -630,30 +626,28 @@ def export_as_docx(session_data: Dict[str, Any], output_path: str) -> str:
     add_custom_heading(f"Translation ({target_lang})", level=1)
     add_callout_box(session_data.get('translated_content') or "Not available", "F5F3FF")
     
-    # Exam Questions
-    add_custom_heading("Exam Questions & Answers", level=1)
+    # Academic Exam Questions
+    add_custom_heading("Academic Exam Questions & Answers", level=1)
     questions = session_data.get('questions', [])
     if questions:
-        q_types = {'definition': 'Definitions', 'fill_blank': 'Fill in the Blanks', 'true_false': 'True or False'}
-        for q_type, q_label in q_types.items():
-            type_qs = [q for q in questions if q['type'] == q_type]
-            if type_qs:
-                add_custom_heading(q_label, level=2)
-                for q in type_qs:
-                    qp = doc.add_paragraph()
-                    qrun = qp.add_run(f"Q: {q['question']}")
-                    qrun.font.bold = True
-                    qrun.font.color.rgb = RGBColor(49, 46, 129) # Deep indigo
-                    qp.paragraph_format.space_before = Pt(4)
-                    qp.paragraph_format.space_after = Pt(2)
-                    qp.paragraph_format.keep_with_next = True
-                    
-                    ap = doc.add_paragraph()
-                    arun = ap.add_run(f"A: {q['answer']}")
-                    arun.font.italic = True
-                    arun.font.color.rgb = RGBColor(71, 85, 105) # Muted Slate
-                    ap.paragraph_format.left_indent = Inches(0.2)
-                    ap.paragraph_format.space_after = Pt(6)
+        for idx, q in enumerate(questions, 1):
+            q_text = q.get('question', '') if isinstance(q, dict) else str(q)
+            a_text = q.get('answer', '') if isinstance(q, dict) else ''
+            qp = doc.add_paragraph()
+            qrun = qp.add_run(f"{idx}. {q_text}")
+            qrun.font.bold = True
+            qrun.font.color.rgb = RGBColor(49, 46, 129) # Deep indigo
+            qp.paragraph_format.space_before = Pt(4)
+            qp.paragraph_format.space_after = Pt(2)
+            qp.paragraph_format.keep_with_next = True
+            
+            if a_text:
+                ap = doc.add_paragraph()
+                arun = ap.add_run(f"Answer: {a_text}")
+                arun.font.italic = True
+                arun.font.color.rgb = RGBColor(71, 85, 105) # Muted Slate
+                ap.paragraph_format.left_indent = Inches(0.2)
+                ap.paragraph_format.space_after = Pt(6)
     else:
         doc.add_paragraph("Not available")
         
@@ -687,18 +681,16 @@ def export_as_txt(session_data: Dict[str, Any], output_path: str) -> str:
         f.write("=== TRANSLATION ===\n")
         f.write((session_data.get('translated_content') or "Not available") + "\n\n")
         
-        f.write("=== EXAM QUESTIONS ===\n")
+        f.write("=== ACADEMIC EXAM QUESTIONS ===\n")
         questions = session_data.get('questions', [])
         if questions:
-            q_types = {'definition': 'Definitions', 'fill_blank': 'Fill in the Blanks', 'true_false': 'True or False'}
-            for q_type, q_label in q_types.items():
-                type_qs = [q for q in questions if q['type'] == q_type]
-                if type_qs:
-                    f.write(f"[{q_label}]\n")
-                    for q in type_qs:
-                        f.write(f"Q: {q['question']}\n")
-                        f.write(f"A: {q['answer']}\n")
-                    f.write("\n")
+            for idx, q in enumerate(questions, 1):
+                q_text = q.get('question', '') if isinstance(q, dict) else str(q)
+                a_text = q.get('answer', '') if isinstance(q, dict) else ''
+                f.write(f"{idx}. {q_text}\n")
+                if a_text:
+                    f.write(f"   Answer: {a_text}\n")
+                f.write("\n")
         else:
             f.write("Not available\n")
             

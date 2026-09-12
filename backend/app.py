@@ -156,7 +156,7 @@ def run_ai_modules(cleaned_text, sentences, target_language):
 
     def task_generate_questions(keywords):
         t0 = time.time()
-        res = generate_questions(sentences, keywords)
+        res = generate_questions(sentences, keywords, target_language="en")
         duration = round(time.time() - t0, 2)
         logger.info(f"AI Module - Question generation completed in {duration}s")
         return res, duration
